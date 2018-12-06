@@ -24,8 +24,8 @@
 	  "link_settings": {
 		 "libraries": [
 		 "quazip.lib",
-		 "$(QTDIR)/lib/Qt5Guid.lib",
-		 "$(QTDIR)/lib/Qt5Cored.lib"
+		 "$(QTDIR)/lib/Qt5Gui.lib",
+		 "$(QTDIR)/lib/Qt5Core.lib"
 		 ],
 		}
     },
