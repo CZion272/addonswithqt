@@ -9,3 +9,4 @@ class CReadImage{
         this.obj = new addons.CImageReader(imagePath, imagePath);
     }
 }
+window.CReadImage = CReadImage;
