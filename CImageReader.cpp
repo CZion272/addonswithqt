@@ -1,6 +1,8 @@
 #include "CImageReader.h"
 #include <QDebug>
 #include "qmath.h"
+#include <QImageWriter>
+#include <QBuffer>
 
 using v8::Context;
 using v8::Exception;
@@ -144,10 +146,39 @@ void CImageReader::creatColorList()
 		}
 	}
 }
-
-bool CImageReader::readCdrPerviewFile(QString strZip)
+QTime t(0, 0, 0);
+bool CImageReader::readImageFile(QString strPath)
 {
-	QuaZip zip(strZip);
+	t.start();
+	QImage img(strPath);
+	qDebug() << "read:" << t.elapsed();
+	if (img.isNull())
+	{
+		qDebug() << "img is null";
+		return false;
+	}
+	m_nWight = img.width();
+	m_nHeight = img.height();
+	img = img.scaled(img.width()*m_nRatio, img.height()*m_nRatio, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+	qDebug() << "frist scaled:" << t.elapsed();
+	QImageWriter imgWriter;
+	QByteArray ba;
+	QBuffer buf(&ba);
+	buf.open(QIODevice::WriteOnly);
+	qDebug() << img.save(&buf, "png", -1);
+	QByteArray hexed = ba.toBase64();
+	imgWriter.setFileName(m_strPreview);
+	//imgWriter.write(img);
+	//img.save(m_strPreview);
+	qDebug() << "save preview:" << t.elapsed();
+	m_imgPreview = img.scaled(256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+	qDebug() << "secend scaled:" << t.elapsed();
+	return true;
+}
+
+bool CImageReader::readCdrPerviewFile(QString strPath)
+{
+	QuaZip zip(strPath);
 	zip.open(QuaZip::mdUnzip);
 	// first, we need some information about archive itself
 	QString comment = zip.getComment();
@@ -164,8 +195,8 @@ bool CImageReader::readCdrPerviewFile(QString strZip)
 			img.loadFromData(imgByte);
 			m_nWight = img.width();
 			m_nHeight = img.height();
-			img = img.scaled(img.width()*m_nRatio, img.height()*m_nRatio, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-			img.save(m_strPreview);
+			m_imgPreview = img.scaled(img.width()*m_nRatio, img.height()*m_nRatio, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+			m_imgPreview.save(m_strPreview);
 			// do something cool with file here
 			file.close(); // do not forget to close!
 			return true;
@@ -195,48 +226,28 @@ void CImageReader::readImage(QString strImage)
 	QFileInfo file(m_strImage);
 
 	bool bReadSave = false;
-	FILETYPE type;
-	if (file.suffix() == "cdr")
+	FILETYPE type = TYPE_NORMAL;
+	if (file.suffix().toLower() == "cdr")
 	{
 		type = TYPE_CDR;
 	}
-	else
+	else if(file.suffix().toLower() == "psd")
 	{
-
+		type = TYPE_PSD;
 	}
 	switch (type)
 	{
-	case CImageReader::TYPE_PNG:
-		break;
-	case CImageReader::TYPE_JPG:
-		break;
-	case CImageReader::TYPE_GIF:
-		break;
-	case CImageReader::TYPE_BIT:
-		break;
-	case CImageReader::TYPE_PBM:
-		break;
-	case CImageReader::TYPE_PGM:
-		break;
-	case CImageReader::TYPE_PPM:
-		break;
-	case CImageReader::TYPE_XBM:
-		break;
-	case CImageReader::TYPE_XPM:
-		break;
-	case CImageReader::TYPE_SVG:
-		break;
+	case CImageReader::TYPE_NORMAL:
+	{
+		bReadSave = readImageFile(m_strImage);
+	}
+	break;
 	case CImageReader::TYPE_CDR:
 	{
-		if (readCdrPerviewFile(m_strImage))
-		{
-			bReadSave = m_imgPreview.load(m_strPreview);
-		}
+		bReadSave = readCdrPerviewFile(m_strImage);
 	}
 	break;
 	case CImageReader::TYPE_AI:
-		break;
-	case CImageReader::TYPE_TIFF:
 		break;
 	case CImageReader::TYPE_PSD:
 		break;
@@ -246,6 +257,7 @@ void CImageReader::readImage(QString strImage)
 	if (bReadSave)
 	{
 		creatColorList();
+		qDebug() << "make color list:" << t.elapsed();
 	}
 }
 

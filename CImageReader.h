@@ -24,19 +24,9 @@ class CImageReader : public node::ObjectWrap
 {
 	enum FILETYPE
 	{
-		TYPE_PNG = 0,
-		TYPE_JPG,
-		TYPE_GIF,
-		TYPE_BIT,
-		TYPE_PBM,
-		TYPE_PGM,
-		TYPE_PPM,
-		TYPE_XBM,
-		TYPE_XPM,
-		TYPE_SVG,
+		TYPE_NORMAL,
 		TYPE_CDR,
 		TYPE_AI,
-		TYPE_TIFF,
 		TYPE_PSD
 	};
 
@@ -51,6 +41,7 @@ private:
 
 	bool compareColor(QColor color);
 	void creatColorList();
+	bool readImageFile(QString strPath);
 	void readImage(QString strImage);
 	bool readCdrPerviewFile(QString strZip);
 	QList<QColor> getColorList();
