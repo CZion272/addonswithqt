@@ -6,7 +6,7 @@ var binding = require(binding_path);
 
 class CReadImage{
     constructor(imagePath, savepath){
-        this.obj = new binding.CImageReader(imagePath, imagePath);
+        this.obj = new binding.CImageReader(imagePath, savepath);
     }
 }
 window.CReadImage = CReadImage;

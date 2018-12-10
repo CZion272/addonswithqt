@@ -22,6 +22,7 @@ Persistent<Function> CImageReader::constructor;
 
 static QColor gWhite(Qt::white);
 
+QFile *g_file = NULL;
 CImageReader::CImageReader(const char* image, const char* preview, float nRatio) :
 	m_strImage(image),
 	m_strPreview(preview),
@@ -61,11 +62,17 @@ void CImageReader::New(const FunctionCallbackInfo<Value>& args)
 	Isolate* isolate = args.GetIsolate();
 
 	// 像构造函数一样调用：`new MyObject(...)`
+	if (!args[0]->IsString() || !args[1]->IsString())
+	{
+		isolate->ThrowException(Exception::TypeError(
+			String::NewFromUtf8(isolate, "参数错误")));
+		args.GetReturnValue().Set(FALSE);
+		return;
+	}
 	v8::String::Utf8Value str(args[0]->ToString());
 	const char *chImage = *str;
 	v8::String::Utf8Value str1(args[1]->ToString());
 	const char *chImage1 = *str1;
-	printf(chImage);
 	CImageReader* obj = new CImageReader(chImage, chImage1);
 	obj->Wrap(args.This());
 	args.GetReturnValue().Set(args.This());
@@ -160,7 +167,7 @@ bool CImageReader::readImageFile(QString strPath)
 	m_nWight = img.width();
 	m_nHeight = img.height();
 	img = img.scaled(img.width()*m_nRatio, img.height()*m_nRatio, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-	qDebug() << "frist scaled:" << t.elapsed();
+	qDebug() << "fir scaled:" << t.elapsed();
 	QImageWriter imgWriter;
 	QByteArray ba;
 	QBuffer buf(&ba);
@@ -172,7 +179,7 @@ bool CImageReader::readImageFile(QString strPath)
 	//img.save(m_strPreview);
 	qDebug() << "save preview:" << t.elapsed();
 	m_imgPreview = img.scaled(256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-	qDebug() << "secend scaled:" << t.elapsed();
+	qDebug() << "sec scaled:" << t.elapsed();
 	return true;
 }
 
