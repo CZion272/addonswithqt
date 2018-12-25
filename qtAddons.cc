@@ -1,12 +1,14 @@
 #include <node.h>
 #include "CImageReader.h"
 
-namespace qtAddons {
+namespace qtAddons
+{
 
 	using v8::Local;
 	using v8::Object;
 
-	void InitAll(Local<Object> exports) {
+	void InitAll(Local<Object> exports)
+	{
 		CImageReader::Init(exports);
 	}
 
