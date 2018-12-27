@@ -24,7 +24,7 @@
 	  ],
 	  "include_dirs": [
 		 "../quazip",
-		 "../libopc/include",
+		 "libopc/include",
 		 "<(MAGICK_ROOT)/include",
 		 "$(QTDIR)/include",
 		 "$(QTDIR)/include/QtGui",
