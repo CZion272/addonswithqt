@@ -39,7 +39,6 @@
 		 "../libopc/lib/opc.lib",
 		 "../libopc/lib/plib.lib",
 		 "../libopc/lib/xml.lib",
-		 "../libopc/lib/zlib.lib",
 		 "../magick/lib/CORE_RL_bzlib_.lib",
 		 "../magick/lib/CORE_RL_cairo_.lib",
 		 "../magick/lib/CORE_RL_coders_.lib",
