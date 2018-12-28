@@ -36,11 +36,14 @@ enum FILETYPE
 	TYPE_OFFICE
 };
 
+class CImageReader;
+
 struct ShareData
 {
 	uv_work_t request;
 	Isolate * isolate;
 	Persistent<Function> js_callback;
+	CImageReader *obj;
 };
 
 class CImageReader : public node::ObjectWrap
@@ -49,10 +52,7 @@ class CImageReader : public node::ObjectWrap
 public:
 	static void Init(v8::Local<v8::Object> exports);
 	static void New(const FunctionCallbackInfo<Value>& args);
-	static void realease();
-
 	void readImage();
-	static CImageReader* getObj() { return m_pInstace; };
 private:
 	explicit CImageReader(const char* strImage = "", const char* strPreview = "");
 	~CImageReader();
@@ -61,7 +61,7 @@ private:
 	int getWigth();
 	int getHeight();
 
-	bool compareColor(QColor color);
+	bool compareColorEx(QColor color);
 
 	bool readImageFile();
 	bool readCdrPerviewFile();
@@ -82,15 +82,16 @@ private:
 	static void cancel(const FunctionCallbackInfo<Value>& args);
 
 	//获取文件属性
-	static void checkColor(const FunctionCallbackInfo<Value>& args);
+	static void compareColor(const FunctionCallbackInfo<Value>& args);
 	static void MD5(const FunctionCallbackInfo<Value>& args);
 	static void colorCount(const FunctionCallbackInfo<Value>& args);
 	static void colorAt(const FunctionCallbackInfo<Value>& args);
 	static void imageWidth(const FunctionCallbackInfo<Value>& args);
 	static void imageHeight(const FunctionCallbackInfo<Value>& args);
+	static void afterReadImageWorkerCb(uv_work_t * req, int status);
+	static void readImageWorkerCb(uv_work_t * req);
 private:
 	static v8::Persistent<v8::Function> m_pConstructor;
-	static CImageReader *m_pInstace;
 
 	QString m_strImage;
 	QImage m_imgImage;

@@ -28,9 +28,6 @@ static int HistogramCompare(const void *x, const void *y)
 	return((int)color_2->count - (int)color_1->count);
 }
 
-CImageReader *CImageReader::m_pInstace = NULL;
-
-
 //ppt导出预览图片
 static void extract(opcContainer *c, opcPart p, const char *path)
 {
@@ -76,7 +73,8 @@ CImageReader::CImageReader(const char* image, const char* preview) :
 	m_nScaleWight(0),
 	m_nScaleHeight(0),
 	m_fRatio(0),
-	m_strMiddleFile("")
+	m_strMiddleFile(""),
+	m_nColorCount(0)
 {
 	//PDF和AI文件必要加载ghostscprit库，查找并设置环境变量
 	if (getenv("MAGICK_GHOSTSCRIPT_PATH") == NULL)
@@ -104,10 +102,6 @@ CImageReader::CImageReader(const char* image, const char* preview) :
 
 CImageReader::~CImageReader()
 {
-	if (m_pInstace)
-	{
-		delete m_pInstace;
-	}
 }
 
 void CImageReader::Init(Local<Object> exports)
@@ -141,16 +135,13 @@ void CImageReader::Init(Local<Object> exports)
 		tpl->GetFunction());
 }
 
-void readImageWorkerCb(uv_work_t * req)
+void CImageReader::readImageWorkerCb(uv_work_t * req)
 {
-	CImageReader *obj = CImageReader::getObj();
-	if (obj)
-	{
-		obj->readImage();
-	}
+	ShareData * my_data = static_cast<ShareData *>(req->data);
+	my_data->obj->readImage();
 }
 
-void afterReadImageWorkerCb(uv_work_t * req, int status)
+void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
 {
 	if (status == UV_ECANCELED)
 	{
@@ -182,22 +173,10 @@ void CImageReader::New(const FunctionCallbackInfo<Value>& args)
 	v8::String::Utf8Value str1(args[1]->ToString());
 	const char *chImage1 = *str1;
 
-	if (!m_pInstace)
-	{
-		m_pInstace = new CImageReader(chImage, chImage1);
-	}
+	CImageReader *obj = new CImageReader(chImage, chImage1);
 
-	m_pInstace->Wrap(args.This());
+	obj->Wrap(args.This());
 	args.GetReturnValue().Set(args.This());
-}
-
-void CImageReader::realease()
-{
-	if (m_pInstace)
-	{
-		delete m_pInstace;
-		m_pInstace = NULL;
-	}
 }
 
 QList<QColor> CImageReader::getColorList()
@@ -215,7 +194,7 @@ int CImageReader::getHeight()
 	return m_nHeight;
 }
 
-bool CImageReader::compareColor(QColor color)
+bool CImageReader::compareColorEx(QColor color)
 {
 	int h = 0, s = 0, v = 0;
 	QColor hsvColor = color.toHsv();
@@ -553,6 +532,7 @@ void CImageReader::readFile(const FunctionCallbackInfo<Value>& args)
 	pReqData->request.data = pReqData;
 	pReqData->isolate = isolate;
 	pReqData->js_callback.Reset(isolate, Local<Function>::Cast(args[0]));
+	pReqData->obj = obj;
 	obj->m_pReqData = pReqData;
 	//libuv线程池执行读取，异步回调
 	uv_queue_work(uv_default_loop(), &(pReqData->request), readImageWorkerCb, afterReadImageWorkerCb);
@@ -568,7 +548,6 @@ void CImageReader::cancel(const FunctionCallbackInfo<Value>& args)
 	{
 		args.GetReturnValue().Set(true);
 		delete obj->m_pReqData;
-		obj->realease();
 		return;
 	}
 	args.GetReturnValue().Set(false);
@@ -625,7 +604,7 @@ void CImageReader::compareColor(const FunctionCallbackInfo<Value>& args)
 		return;
 	}
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-	bool bCompare = obj->compareColor(color);
+	bool bCompare = obj->compareColorEx(color);
 	args.GetReturnValue().Set(!bCompare);
 }
 
