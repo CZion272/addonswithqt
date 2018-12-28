@@ -75,7 +75,8 @@ CImageReader::CImageReader(const char* image, const char* preview) :
 	m_nWight(0),
 	m_nScaleWight(0),
 	m_nScaleHeight(0),
-	m_fRatio(0)
+	m_fRatio(0),
+	m_strMiddleFile("")
 {
 	//PDF和AI文件必要加载ghostscprit库，查找并设置环境变量
 	if (getenv("MAGICK_GHOSTSCRIPT_PATH") == NULL)
@@ -128,11 +129,11 @@ void CImageReader::Init(Local<Object> exports)
 	NODE_SET_PROTOTYPE_METHOD(tpl, "readFile", readFile);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "cancel", cancel);
 	
-	NODE_SET_PROTOTYPE_METHOD(tpl, "checkColor", checkColor);
+	NODE_SET_PROTOTYPE_METHOD(tpl, "compareColor", compareColor);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "colorCount", colorCount);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "colorAt", colorAt);
-	NODE_SET_PROTOTYPE_METHOD(tpl, "ImageWidth", ImageWidth);
-	NODE_SET_PROTOTYPE_METHOD(tpl, "ImageHeigth", ImageHeigth);
+	NODE_SET_PROTOTYPE_METHOD(tpl, "imageWidth", imageWidth);
+	NODE_SET_PROTOTYPE_METHOD(tpl, "imageHeight", imageHeight);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "MD5", MD5);
 
 	m_pConstructor.Reset(isolate, tpl->GetFunction());
@@ -477,7 +478,7 @@ bool CImageReader::readPPT()
 	}
 	opcFreeLibrary();
 	m_strImage = path;
-	qDebug() << m_strImage;
+
 	return readImageFile();
 }
 
@@ -604,7 +605,7 @@ void CImageReader::setMiddleFile(const FunctionCallbackInfo<Value>& args)
 	obj->m_strMiddleFile = *str;
 }
 
-void CImageReader::checkColor(const FunctionCallbackInfo<Value>& args)
+void CImageReader::compareColor(const FunctionCallbackInfo<Value>& args)
 {
 	Isolate* isolate = args.GetIsolate();
 	if (!args[0]->IsString())
@@ -681,15 +682,17 @@ void CImageReader::colorAt(const FunctionCallbackInfo<Value>& args)
 	return;
 }
 
-void CImageReader::ImageWidth(const FunctionCallbackInfo<Value>& args)
+void CImageReader::imageWidth(const FunctionCallbackInfo<Value>& args)
 {
+	Isolate* isolate = args.GetIsolate();
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
 
 	args.GetReturnValue().Set(obj->getWigth());
 }
 
-void CImageReader::ImageHeigth(const FunctionCallbackInfo<Value>& args)
+void CImageReader::imageHeight(const FunctionCallbackInfo<Value>& args)
 {
+	Isolate* isolate = args.GetIsolate();
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
 
 	args.GetReturnValue().Set(obj->getHeight());

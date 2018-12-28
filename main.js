@@ -8,9 +8,21 @@ exports.SetMaxThread = function(threadNumber) {
 }
 
 class CReadImage{
-    constructor(imagePath, savepath, ratio){
-        this.obj = new binding.CImageReader(imagePath, savepath, ratio);
+    constructor(imagePath, savepath){
+        this.obj = new binding.CImageReader(imagePath, savepath);
     }
+	
+	setDefaultColorList(colorlist){
+		this.obj.setDefaultColorList(colorlist);
+	}
+	
+	setDefaultImageSize(width, height){
+		this.obj.setDefaultImageSize(colorlist);
+	}
+	
+	setDefaultMD5(md5){
+		this.obj.setDefaultImageSize(md5);
+	}
 	
 	setPreviewSize(width, height){
 		this.obj.setPreviewSize(width, height);
@@ -29,7 +41,7 @@ class CReadImage{
 	}
 	
 	compareColor(color){
-		return this.obj.checkColor(color);
+		return this.obj.compareColor(color);
 	}
 	
 	colorCount(){
@@ -41,11 +53,11 @@ class CReadImage{
 	}
 	
 	imageWidth(){
-		return this.obj.ImageWidth();
+		return this.obj.imageWidth();
 	}
 	
 	imageHeight(){
-		return this.obj.ImageHeight();
+		return this.obj.imageHeight();
 	}
 }
 window.CReadImage = CReadImage;

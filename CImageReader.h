@@ -86,8 +86,8 @@ private:
 	static void MD5(const FunctionCallbackInfo<Value>& args);
 	static void colorCount(const FunctionCallbackInfo<Value>& args);
 	static void colorAt(const FunctionCallbackInfo<Value>& args);
-	static void ImageWidth(const FunctionCallbackInfo<Value>& args);
-	static void ImageHeigth(const FunctionCallbackInfo<Value>& args);
+	static void imageWidth(const FunctionCallbackInfo<Value>& args);
+	static void imageHeight(const FunctionCallbackInfo<Value>& args);
 private:
 	static v8::Persistent<v8::Function> m_pConstructor;
 	static CImageReader *m_pInstace;
