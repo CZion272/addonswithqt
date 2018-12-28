@@ -74,7 +74,8 @@ CImageReader::CImageReader(const char* image, const char* preview) :
 	m_nHeight(0),
 	m_nWight(0),
 	m_nScaleWight(0),
-	m_nScaleHeight(0)
+	m_nScaleHeight(0),
+	m_fRatio(0)
 {
 	//PDF和AI文件必要加载ghostscprit库，查找并设置环境变量
 	if (getenv("MAGICK_GHOSTSCRIPT_PATH") == NULL)
@@ -123,7 +124,7 @@ void CImageReader::Init(Local<Object> exports)
 	NODE_SET_PROTOTYPE_METHOD(tpl, "setDefaultMD5", setDefaultMD5);
 	
 	NODE_SET_PROTOTYPE_METHOD(tpl, "setMiddleFile", setMiddleFile);
-	NODE_SET_PROTOTYPE_METHOD(tpl, "setPerviewSize", setPreviewSize);
+	NODE_SET_PROTOTYPE_METHOD(tpl, "setPreviewSize", setPreviewSize);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "readFile", readFile);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "cancel", cancel);
 	
@@ -299,10 +300,15 @@ bool CImageReader::readImageFile()
 	Image *img = NULL;
 	Image *imgScale = NULL;
 
-	if ((img = RemoveFirstImageFromList(&images)) != (Image *)NULL)
+	while ((img = RemoveFirstImageFromList(&images)) != (Image *)NULL)
 	{
 		m_nHeight = img->magick_rows;
 		m_nWight = img->magick_columns;
+
+		if (m_nHeight == 0 || m_nWight == 0)
+		{
+			return false;
+		}
 
 		if (m_nHeight > m_nWight)
 		{
@@ -354,7 +360,9 @@ bool CImageReader::readImageFile()
 			MagickError(exception->severity, exception->reason, exception->description);
 		(void)AppendImageToList(&thumbnails, imgScale);
 		DestroyImage(img);
+		break;
 	}
+
 	/*
 	  Write the image thumbnail.
 	*/
@@ -469,6 +477,7 @@ bool CImageReader::readPPT()
 	}
 	opcFreeLibrary();
 	m_strImage = path;
+	qDebug() << m_strImage;
 	return readImageFile();
 }
 
