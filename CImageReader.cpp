@@ -157,15 +157,23 @@ void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
 		delete my_data;
 		return;
 	}
+
 	if (my_data->m_pSemThis)
 	{
 		uv_sem_post(&my_data->m_pSemThis);
-		uv_sem_destroy(&my_data->m_pSemThis);
 	}
+
 	Isolate * isolate = my_data->isolate;
 	HandleScope scope(isolate);
 	Local<Function> js_callback = Local<Function>::New(isolate, my_data->js_callback);
 	js_callback->Call(isolate->GetCurrentContext()->Global(), 0, NULL);
+
+	if (my_data->m_pSemThis)
+	{
+		uv_sem_destroy(&my_data->m_pSemThis);
+		g_pSemSave = NULL;
+	}
+
 	delete my_data;
 	m_pConstructor.Reset();
 }
@@ -289,90 +297,90 @@ bool CImageReader::readImageFile()
 
 	strcpy(imageInfo->filename, m_strImage.toStdString().c_str());
 	strcpy(thumbnailsInfo->filename, m_strPreview.toStdString().c_str());
-
 	Image *images = ReadImage(imageInfo, exception);
+
 	if (images == NULL)
 	{
 		QImage qImag(m_strImage);
 		if (!qImag.isNull())
 		{
 			QFileInfo fInfo(imageInfo->filename);
-			QString tryFile(fInfo.baseName() + "." + fInfo.suffix());
+			QString tempFile(fInfo.baseName() + "." + fInfo.suffix());
 			qImag.save(fInfo.baseName() + "." + fInfo.suffix());
-			strcpy(imageInfo->filename, tryFile.toStdString().c_str());
+			strcpy(imageInfo->filename, tempFile.toStdString().c_str());
 			images = ReadImage(imageInfo, exception);
-			QFile::remove(tryFile);
+			QFile::remove(tempFile);
 		}
 		else
 		{
-			qDebug() << QString(exception->reason) << QString(exception->description);
 			return false;
 		}
 	}
-
 	Image *thumbnails = NewImageList();
 
-
-	m_nHeight = images->magick_rows;
-	m_nWight = images->magick_columns;
-
-	if (m_nHeight == 0 || m_nWight == 0)
+	Image *image = NULL;
+	if ((image = RemoveFirstImageFromList(&images)) != (Image *)NULL)
 	{
-		return false;
-	}
+		m_nHeight = image->magick_rows;
+		m_nWight = image->magick_columns;
 
-	if (m_nHeight > m_nWight)
-	{
-		if (m_nScaleHeight != 0)
+		if (m_nHeight == 0 || m_nWight == 0)
 		{
-			m_fRatio = (float)m_nScaleHeight / (float)m_nHeight;
+			return false;
+		}
+
+		if (m_nHeight > m_nWight)
+		{
+			if (m_nScaleHeight != 0)
+			{
+				m_fRatio = (float)m_nScaleHeight / (float)m_nHeight;
+			}
+			else
+			{
+				m_fRatio = (float)m_nScaleWight / (float)m_nWight;
+			}
 		}
 		else
 		{
-			m_fRatio = (float)m_nScaleWight / (float)m_nWight;
+			if (m_nScaleWight != 0)
+			{
+				m_fRatio = (float)m_nScaleWight / (float)m_nWight;
+			}
+			else
+			{
+				m_fRatio = (float)m_nScaleHeight / (float)m_nHeight;
+			}
 		}
-	}
-	else
-	{
-		if (m_nScaleWight != 0)
+		if (m_fRatio == 0.00)
 		{
-			m_fRatio = (float)m_nScaleWight / (float)m_nWight;
+			m_fRatio = 1.0;
+		}
+
+		if (m_strSufix == "gif")
+		{
+			thumbnails = ThumbnailImage(image, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
 		}
 		else
 		{
-			m_fRatio = (float)m_nScaleHeight / (float)m_nHeight;
+			thumbnails = ScaleImage(image, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
 		}
-	}
-	if (m_fRatio == 0.00)
-	{
-		m_fRatio = 1.0;
-	}
+		if (thumbnails == (Image *)NULL)
+			MagickError(exception->severity, exception->reason, exception->description);
 
-	if (m_strSufix == "gif")
-	{
-		thumbnails = ThumbnailImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
-	}
-	else
-	{
-		thumbnails = ScaleImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
-	}
-	if (thumbnails == (Image *)NULL)
-		MagickError(exception->severity, exception->reason, exception->description);
-
-
-	if (!m_strMiddleFile.isEmpty())
-	{
-		if (//ppt和cdr均已保存过中间文件
-			m_strSufix != "ppt"
-			|| m_strSufix != "pptx"
-			|| m_strSufix != "cdr"
-			)
+		if (!m_strMiddleFile.isEmpty())
 		{
-			(void)strcpy(images->filename, m_strMiddleFile.toStdString().c_str());
-			WriteImage(imageInfo, images, exception);
+			if (//ppt和cdr均已保存过中间文件
+				m_strSufix != "ppt"
+				|| m_strSufix != "pptx"
+				|| m_strSufix != "cdr"
+				)
+			{
+				(void)strcpy(image->filename, m_strMiddleFile.toStdString().c_str());
+				WriteImage(imageInfo, image, exception);
+			}
 		}
+		image = DestroyImage(image);
 	}
-
 
 
 	//压缩图片颜色，操作时间比较长，可以有效缩小缩略图大小
@@ -430,7 +438,6 @@ bool CImageReader::readImageFile()
 	thumbnailsInfo = DestroyImageInfo(thumbnailsInfo);
 
 	exception = DestroyExceptionInfo(exception);
-
 	return b;
 }
 
