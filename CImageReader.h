@@ -43,7 +43,10 @@ struct ShareData
 	uv_work_t request;
 	Isolate * isolate;
 	Persistent<Function> js_callback;
-	CImageReader *obj;
+	CImageReader* obj;
+
+	uv_sem_t m_pSemThis = NULL;
+	uv_sem_t m_pSemLast = NULL;
 };
 
 class CImageReader : public node::ObjectWrap
@@ -110,7 +113,6 @@ private:
 
 	int m_nColorCount;
 	ShareData * m_pReqData;
-
 };
 
 #endif // QTADDONS_H

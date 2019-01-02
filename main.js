@@ -3,10 +3,6 @@ var path = require('path');
 var binding_path = binary.find(path.resolve(path.join(__dirname,'./package.json')));
 var binding = require(binding_path);
 
-exports.SetMaxThread = function(threadNumber) {
-  return binding.setMaxThread(threadNumber);
-}
-
 class CReadImage{
     constructor(imagePath, savepath){
         this.obj = new binding.CImageReader(imagePath, savepath);
@@ -26,6 +22,10 @@ class CReadImage{
 	
 	setPreviewSize(width, height){
 		this.obj.setPreviewSize(width, height);
+	}
+	
+	setMiddleFile(filePath){
+		this.obj.setMiddleFile(filePath);
 	}
 	
 	readFile(funcation){
