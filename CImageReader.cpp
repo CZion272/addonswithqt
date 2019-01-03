@@ -133,6 +133,7 @@ void CImageReader::Init(Local<Object> exports)
 	NODE_SET_PROTOTYPE_METHOD(tpl, "imageWidth", imageWidth);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "imageHeight", imageHeight);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "MD5", MD5);
+	NODE_SET_PROTOTYPE_METHOD(tpl, "errorReason", errorReason);
 
 	m_pConstructor.Reset(isolate, tpl->GetFunction());
 	exports->Set(String::NewFromUtf8(isolate, "CImageReader"),
@@ -286,6 +287,8 @@ void CImageReader::readImage()
 	}
 }
 
+QTime t(0, 0, 0);
+
 bool CImageReader::readImageFile()
 {
 	ExceptionInfo *exception;
@@ -297,8 +300,10 @@ bool CImageReader::readImageFile()
 
 	strcpy(imageInfo->filename, m_strImage.toStdString().c_str());
 	strcpy(thumbnailsInfo->filename, m_strPreview.toStdString().c_str());
+	t.start();
+	qDebug() << m_strImage;
 	Image *images = ReadImage(imageInfo, exception);
-
+	qDebug() << "read" << t.elapsed();
 	if (images == NULL)
 	{
 		QImage qImag(m_strImage);
@@ -313,6 +318,7 @@ bool CImageReader::readImageFile()
 		}
 		else
 		{
+			m_strImageMgickError = exception->reason;
 			return false;
 		}
 	}
@@ -356,14 +362,14 @@ bool CImageReader::readImageFile()
 			m_fRatio = 1.0;
 		}
 
-		if (m_strSufix == "gif")
+		//if (m_strSufix == "gif")
 		{
-			thumbnails = ThumbnailImage(image, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
+			thumbnails = AdaptiveResizeImage(image, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
 		}
-		else
-		{
-			thumbnails = ScaleImage(image, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
-		}
+		//else
+		//{
+		//	thumbnails = ScaleImage(image, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
+		//}
 		if (thumbnails == (Image *)NULL)
 			MagickError(exception->severity, exception->reason, exception->description);
 
@@ -381,20 +387,26 @@ bool CImageReader::readImageFile()
 		}
 		image = DestroyImage(image);
 	}
-
-
+	m_strImageMgickError = exception->reason;
+	qDebug() << "scale" << t.elapsed();
+	QuantizeInfo *quantize = AcquireQuantizeInfo(thumbnailsInfo);
 	//压缩图片颜色，操作时间比较长，可以有效缩小缩略图大小
-	//SetImageColorspace(thumbnails, RGBColorspace, exception);
-	//CompressImageColormap(thumbnails, exception);
+	SetImageColorspace(thumbnails, RGBColorspace, exception);
+	CompressImageColormap(thumbnails, exception);
 	//quantize->colorspace = RGBColorspace;
 	//quantize->number_colors = 20;
-	//QuantizeImage(quantize, thumbnails, exception);
+	QuantizeImage(quantize, thumbnails, exception);
 
 	size_t nColors = 0;
 	//创建颜色直方图，排序
 	if (thumbnails == NULL)
 	{
-		images = DestroyImage(images);
+		m_strImageMgickError = exception->reason;
+		images = DestroyImageList(images);
+		thumbnails = DestroyImageList(thumbnails);
+		imageInfo = DestroyImageInfo(imageInfo);
+		thumbnailsInfo = DestroyImageInfo(thumbnailsInfo);
+		exception = DestroyExceptionInfo(exception);
 		return false;
 	}
 
@@ -402,7 +414,7 @@ bool CImageReader::readImageFile()
 	QMap<QString, int> mapColor;
 	QList<QColor> lstColor;
 	QList<int> lstColorNumber;
-
+	qDebug() << "Histogram" << t.elapsed();
 	qsort((void *)p, (size_t)nColors, sizeof(*p), HistogramCompare);
 	PixelInfo pixel;
 	GetPixelInfo(thumbnails, &pixel);
@@ -428,15 +440,12 @@ bool CImageReader::readImageFile()
 	*/
 	(void)strcpy(thumbnails->filename, m_strPreview.toStdString().c_str());
 	bool b = WriteImage(thumbnailsInfo, thumbnails, exception);
-
+	qDebug() << "write" <<t.elapsed();
 	images = DestroyImageList(images);
-
 	thumbnails = DestroyImageList(thumbnails);
-
 	imageInfo = DestroyImageInfo(imageInfo);
-
 	thumbnailsInfo = DestroyImageInfo(thumbnailsInfo);
-
+	m_strImageMgickError = exception->reason;
 	exception = DestroyExceptionInfo(exception);
 	return b;
 }
@@ -736,4 +745,12 @@ void CImageReader::imageHeight(const FunctionCallbackInfo<Value>& args)
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
 
 	args.GetReturnValue().Set(obj->getHeight());
+}
+
+void CImageReader::errorReason(const FunctionCallbackInfo<Value>& args)
+{
+	Isolate* isolate = args.GetIsolate();
+	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+
+	args.GetReturnValue().Set(String::NewFromUtf8(isolate, obj->m_strImageMgickError.toLatin1().constData()));
 }

@@ -93,6 +93,8 @@ private:
 	static void imageHeight(const FunctionCallbackInfo<Value>& args);
 	static void afterReadImageWorkerCb(uv_work_t * req, int status);
 	static void readImageWorkerCb(uv_work_t * req);
+
+	static void errorReason(const FunctionCallbackInfo<Value>& args);
 private:
 	static v8::Persistent<v8::Function> m_pConstructor;
 
@@ -104,6 +106,7 @@ private:
 	QString m_strMd5;
 	QString m_strMiddleFile;
 	QString m_strSufix;
+	QString m_strImageMgickError;
 
 	int m_nHeight;
 	int m_nWight;
