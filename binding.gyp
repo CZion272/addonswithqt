@@ -45,6 +45,7 @@
 		 "../magick/lib/CORE_RL_croco_.lib",
 		 "../magick/lib/CORE_RL_exr_.lib",
 		 "../magick/lib/CORE_RL_ffi_.lib",
+		 "../magick/lib/CORE_RL_filters_.lib",
 		 "../magick/lib/CORE_RL_flif_.lib",
 		 "../magick/lib/CORE_RL_glib_.lib",
 		 "../magick/lib/CORE_RL_jp2_.lib",
@@ -57,7 +58,9 @@
 		 "../magick/lib/CORE_RL_librsvg_.lib",
 		 "../magick/lib/CORE_RL_libxml_.lib",
 		 "../magick/lib/CORE_RL_lqr_.lib",
+		 "../magick/lib/CORE_RL_Magick++_.lib",
 		 "../magick/lib/CORE_RL_MagickCore_.lib",
+		 "../magick/lib/CORE_RL_MagickWand_.lib",		 
 		 "../magick/lib/CORE_RL_openjpeg_.lib",
 		 "../magick/lib/CORE_RL_pango_.lib",
 		 "../magick/lib/CORE_RL_pixman_.lib",
@@ -77,12 +80,6 @@
       "target_name": "action_after_build",
       "type": "none",
       "dependencies": [ "<(module_name)" ],
-      "copies": [
-        {
-          "files": [ "<(PRODUCT_DIR)/DllOffice.node" ],
-          "destination": "<(module_path)"
-        }
-      ],
       "copies": [
         {
           "files": [ "<(PRODUCT_DIR)/<(module_name).node" ],

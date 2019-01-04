@@ -10,9 +10,10 @@
 #include <QImageReader>
 #include <node.h>
 #include <QFileInfo>
-#include <node_object_wrap.h>
 #include <MagickCore/MagickCore.h>
 #include <direct.h>
+//#include <Magick++.h> 
+#include <node_object_wrap.h>
 
 using namespace v8;
 using v8::Context;

@@ -8,8 +8,10 @@
 #include <QTemporaryFile>
 #include "opc/opc.h"
 #include <QThread>
+#include <QFile>
 
 using namespace std;
+//using namespace Magick;
 Persistent<Function> CImageReader::m_pConstructor;
 
 static double gR = 100;
@@ -297,21 +299,28 @@ bool CImageReader::readImageFile()
 	ImageInfo *imageInfo, *thumbnailsInfo;
 	imageInfo = CloneImageInfo(NULL);
 	thumbnailsInfo = CloneImageInfo(NULL);
-
+#ifdef DEBUG
+	strcpy(imageInfo->filename, "0.svg");
+	strcpy(thumbnailsInfo->filename, "0.png");
+#else
 	strcpy(imageInfo->filename, m_strImage.toStdString().c_str());
 	strcpy(thumbnailsInfo->filename, m_strPreview.toStdString().c_str());
+#endif // DEBUG
+
 	t.start();
 	qDebug() << m_strImage;
+	imageInfo->debug = MagickTrue;
 	Image *images = ReadImage(imageInfo, exception);
 	qDebug() << "read" << t.elapsed();
 	if (images == NULL)
 	{
+		qDebug() << exception->reason;
 		QImage qImag(m_strImage);
 		if (!qImag.isNull())
 		{
 			QFileInfo fInfo(imageInfo->filename);
 			QString tempFile(fInfo.baseName() + "." + fInfo.suffix());
-			qImag.save(fInfo.baseName() + "." + fInfo.suffix());
+			qImag.save(fInfo.baseName() + "." + "png");
 			strcpy(imageInfo->filename, tempFile.toStdString().c_str());
 			images = ReadImage(imageInfo, exception);
 			QFile::remove(tempFile);
@@ -322,6 +331,13 @@ bool CImageReader::readImageFile()
 			return false;
 		}
 	}
+
+	if (images == NULL)
+	{
+		m_strImageMgickError = exception->reason;
+		return false;
+	}
+
 	Image *thumbnails = NewImageList();
 
 	Image *image = NULL;
@@ -387,15 +403,7 @@ bool CImageReader::readImageFile()
 		}
 		image = DestroyImage(image);
 	}
-	m_strImageMgickError = exception->reason;
 	qDebug() << "scale" << t.elapsed();
-	QuantizeInfo *quantize = AcquireQuantizeInfo(thumbnailsInfo);
-	//压缩图片颜色，操作时间比较长，可以有效缩小缩略图大小
-	SetImageColorspace(thumbnails, RGBColorspace, exception);
-	CompressImageColormap(thumbnails, exception);
-	//quantize->colorspace = RGBColorspace;
-	//quantize->number_colors = 20;
-	QuantizeImage(quantize, thumbnails, exception);
 
 	size_t nColors = 0;
 	//创建颜色直方图，排序
@@ -409,6 +417,12 @@ bool CImageReader::readImageFile()
 		exception = DestroyExceptionInfo(exception);
 		return false;
 	}
+
+	QuantizeInfo *quantize = AcquireQuantizeInfo(thumbnailsInfo);
+	//压缩图片颜色，操作时间比较长，可以有效缩小缩略图大小
+	//SetImageColorspace(thumbnails, RGBColorspace, exception);
+	CompressImageColormap(thumbnails, exception);
+	QuantizeImage(quantize, thumbnails, exception);
 
 	PixelInfo *p = GetImageHistogram(thumbnails, &nColors, exception);
 	QMap<QString, int> mapColor;
@@ -428,10 +442,14 @@ bool CImageReader::readImageFile()
 		QString strHex(hex);
 		strHex = strHex.left(13);
 
-		if (m_lstColor.indexOf(QColor(strHex)) == -1)
+		if (compareColorEx(QColor(strHex)))
 		{
-			m_lstColor.append(QColor(strHex));
+			//if (m_lstColor.indexOf(QColor(strHex)) == -1)
+			{
+				m_lstColor.append(QColor(strHex));
+			}
 		}
+
 
 		p++;
 	}
@@ -440,7 +458,7 @@ bool CImageReader::readImageFile()
 	*/
 	(void)strcpy(thumbnails->filename, m_strPreview.toStdString().c_str());
 	bool b = WriteImage(thumbnailsInfo, thumbnails, exception);
-	qDebug() << "write" <<t.elapsed();
+	qDebug() << "write" << t.elapsed();
 	images = DestroyImageList(images);
 	thumbnails = DestroyImageList(thumbnails);
 	imageInfo = DestroyImageInfo(imageInfo);
