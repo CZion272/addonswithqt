@@ -24,21 +24,16 @@
 	  ],
 	  "include_dirs": [
 		 "../quazip",
-		 "libopc/include",
 		 "<(MAGICK_ROOT)/include",
 		 "$(QTDIR)/include",
 		 "$(QTDIR)/include/QtGui",
 		 "$(QTDIR)/include/QtANGLE",
 		 "$(QTDIR)/include/QtCore",
-		 "$(QTDIR)/mkspecs/win32-msvc"
+		 "$(QTDIR)/mkspecs/win32-msvc",	
 		 ],
 	  "link_settings": {
 		 "libraries": [
 		 "../quazip/release/quazip.lib",
-		 "../libopc/lib/mce.lib",
-		 "../libopc/lib/opc.lib",
-		 "../libopc/lib/plib.lib",
-		 "../libopc/lib/xml.lib",
 		 "../magick/lib/CORE_RL_bzlib_.lib",
 		 "../magick/lib/CORE_RL_cairo_.lib",
 		 "../magick/lib/CORE_RL_coders_.lib",
@@ -58,9 +53,7 @@
 		 "../magick/lib/CORE_RL_librsvg_.lib",
 		 "../magick/lib/CORE_RL_libxml_.lib",
 		 "../magick/lib/CORE_RL_lqr_.lib",
-		 "../magick/lib/CORE_RL_Magick++_.lib",
-		 "../magick/lib/CORE_RL_MagickCore_.lib",
-		 "../magick/lib/CORE_RL_MagickWand_.lib",		 
+		 "../magick/lib/CORE_RL_MagickCore_.lib",	 
 		 "../magick/lib/CORE_RL_openjpeg_.lib",
 		 "../magick/lib/CORE_RL_pango_.lib",
 		 "../magick/lib/CORE_RL_pixman_.lib",
@@ -69,7 +62,6 @@
 		 "../magick/lib/CORE_RL_ttf_.lib",
 		 "../magick/lib/CORE_RL_webp_.lib",
 		 "../magick/lib/CORE_RL_zlib_.lib",
-		 "../magick/lib/CORE_RL_jbig_.lib",
 		 "../magick/lib/CORE_RL_flif_.lib",
 		 "$(QTDIR)/lib/Qt5Gui.lib",		 
 		 "$(QTDIR)/lib/Qt5Core.lib"

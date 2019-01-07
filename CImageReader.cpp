@@ -6,7 +6,7 @@
 #include <QTimer>
 #include <QCryptographicHash>
 #include <QTemporaryFile>
-#include "opc/opc.h"
+//#include "opc/opc.h"
 #include <QThread>
 #include <QFile>
 
@@ -32,41 +32,41 @@ static int HistogramCompare(const void *x, const void *y)
 }
 
 //ppt导出预览图片
-static void extract(opcContainer *c, opcPart p, const char *path)
-{
-	char filename[OPC_MAX_PATH];
-	opc_uint32_t i = xmlStrlen(p);
-	while (i > 0 && p[i] != '/')
-	{
-		i--;
-	}
-	if (p[i] == '/')
-	{
-		i++;
-	}
-	QString strType((char*)(p + i));
-	if (!strType.contains("thumbnail"))
-	{
-		return;
-	}
-	strcpy(filename, path);
-	FILE *out = fopen(filename, "wb");
-	if (NULL != out)
-	{
-		opcContainerInputStream *stream = opcContainerOpenInputStream(c, p);
-		if (NULL != stream)
-		{
-			opc_uint32_t  ret = 0;
-			opc_uint8_t buf[100];
-			while ((ret = opcContainerReadInputStream(stream, buf, sizeof(buf))) > 0)
-			{
-				fwrite(buf, sizeof(char), ret, out);
-			}
-			opcContainerCloseInputStream(stream);
-		}
-		fclose(out);
-	}
-}
+//static void extract(opcContainer *c, opcPart p, const char *path)
+//{
+//	char filename[OPC_MAX_PATH];
+//	opc_uint32_t i = xmlStrlen(p);
+//	while (i > 0 && p[i] != '/')
+//	{
+//		i--;
+//	}
+//	if (p[i] == '/')
+//	{
+//		i++;
+//	}
+//	QString strType((char*)(p + i));
+//	if (!strType.contains("thumbnail"))
+//	{
+//		return;
+//	}
+//	strcpy(filename, path);
+//	FILE *out = fopen(filename, "wb");
+//	if (NULL != out)
+//	{
+//		opcContainerInputStream *stream = opcContainerOpenInputStream(c, p);
+//		if (NULL != stream)
+//		{
+//			opc_uint32_t  ret = 0;
+//			opc_uint8_t buf[100];
+//			while ((ret = opcContainerReadInputStream(stream, buf, sizeof(buf))) > 0)
+//			{
+//				fwrite(buf, sizeof(char), ret, out);
+//			}
+//			opcContainerCloseInputStream(stream);
+//		}
+//		fclose(out);
+//	}
+//}
 
 uv_sem_t g_pSemSave = NULL;
 
@@ -79,7 +79,8 @@ CImageReader::CImageReader(const char* image, const char* preview) :
 	m_nScaleHeight(0),
 	m_fRatio(0),
 	m_strMiddleFile(""),
-	m_nColorCount(0)
+	m_nColorCount(0),
+	m_strImageMgickError("")
 {
 	//PDF和AI文件必要加载ghostscprit库，查找并设置环境变量
 	if (getenv("MAGICK_GHOSTSCRIPT_PATH") == NULL)
@@ -135,7 +136,6 @@ void CImageReader::Init(Local<Object> exports)
 	NODE_SET_PROTOTYPE_METHOD(tpl, "imageWidth", imageWidth);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "imageHeight", imageHeight);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "MD5", MD5);
-	NODE_SET_PROTOTYPE_METHOD(tpl, "errorReason", errorReason);
 
 	m_pConstructor.Reset(isolate, tpl->GetFunction());
 	exports->Set(String::NewFromUtf8(isolate, "CImageReader"),
@@ -154,6 +154,7 @@ void CImageReader::readImageWorkerCb(uv_work_t * req)
 
 void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
 {
+	MagickCoreTerminus();
 	ShareData * my_data = static_cast<ShareData *>(req->data);
 	if (status == UV_ECANCELED)
 	{
@@ -169,8 +170,8 @@ void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
 	Isolate * isolate = my_data->isolate;
 	HandleScope scope(isolate);
 	Local<Function> js_callback = Local<Function>::New(isolate, my_data->js_callback);
-	js_callback->Call(isolate->GetCurrentContext()->Global(), 0, NULL);
-
+	Local<Value> error = v8::Exception::TypeError(String::NewFromUtf8(isolate, my_data->obj->m_strImageMgickError.toStdString().c_str()));
+	js_callback->Call(isolate->GetCurrentContext()->Global(), 0, &error);
 	if (my_data->m_pSemThis)
 	{
 		uv_sem_destroy(&my_data->m_pSemThis);
@@ -248,7 +249,7 @@ bool CImageReader::compareColorEx(QColor color)
 		double dz = z1 - z2;
 
 		qreal rCom = qSqrt((dx * dx + dy * dy + dz * dz));
-		if ((int)rCom < 50000)
+		if ((int)rCom < 150000)
 		{
 			return true;
 		}
@@ -293,9 +294,10 @@ QTime t(0, 0, 0);
 
 bool CImageReader::readImageFile()
 {
+	MagickCoreGenesis("", MagickFalse);
 	ExceptionInfo *exception;
+	size_t number_formats;
 	exception = AcquireExceptionInfo();
-
 	ImageInfo *imageInfo, *thumbnailsInfo;
 	imageInfo = CloneImageInfo(NULL);
 	thumbnailsInfo = CloneImageInfo(NULL);
@@ -386,8 +388,6 @@ bool CImageReader::readImageFile()
 		//{
 		//	thumbnails = ScaleImage(image, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
 		//}
-		if (thumbnails == (Image *)NULL)
-			MagickError(exception->severity, exception->reason, exception->description);
 
 		if (!m_strMiddleFile.isEmpty())
 		{
@@ -442,7 +442,7 @@ bool CImageReader::readImageFile()
 		QString strHex(hex);
 		strHex = strHex.left(13);
 
-		if (compareColorEx(QColor(strHex)))
+		if (!compareColorEx(QColor(strHex)))
 		{
 			//if (m_lstColor.indexOf(QColor(strHex)) == -1)
 			{
@@ -502,33 +502,33 @@ bool CImageReader::readCdrPerviewFile()
 
 bool CImageReader::readPPT()
 {
-	opcInitLibrary();
-	opcContainer *c = opcContainerOpen(_X(m_strImage.toStdString().c_str()), OPC_OPEN_READ_ONLY, NULL, NULL);
+	//opcInitLibrary();
+	//opcContainer *c = opcContainerOpen(_X(m_strImage.toStdString().c_str()), OPC_OPEN_READ_ONLY, NULL, NULL);
 
-	const char * path = m_strMiddleFile.isEmpty() ? m_strPreview.toStdString().c_str() : m_strMiddleFile.toStdString().c_str();
+	//const char * path = m_strMiddleFile.isEmpty() ? m_strPreview.toStdString().c_str() : m_strMiddleFile.toStdString().c_str();
 
-	if (NULL != c)
-	{
-		for (opcPart part = opcPartGetFirst(c); OPC_PART_INVALID != part; part = opcPartGetNext(c, part))
-		{
-			const xmlChar *type = opcPartGetType(c, part);
-			if (xmlStrcmp(type, _X("image/jpeg")) == 0)
-			{
-				extract(c, part, path);
-			}
-			else if (xmlStrcmp(type, _X("image/png")) == 0)
-			{
-				extract(c, part, path);
-			}
-			else
-			{
-				printf("skipped %s of type %s\n", part, type);
-			}
-		}
-		opcContainerClose(c, OPC_CLOSE_NOW);
-	}
-	opcFreeLibrary();
-	m_strImage = path;
+	//if (NULL != c)
+	//{
+	//	for (opcPart part = opcPartGetFirst(c); OPC_PART_INVALID != part; part = opcPartGetNext(c, part))
+	//	{
+	//		const xmlChar *type = opcPartGetType(c, part);
+	//		if (xmlStrcmp(type, _X("image/jpeg")) == 0)
+	//		{
+	//			extract(c, part, path);
+	//		}
+	//		else if (xmlStrcmp(type, _X("image/png")) == 0)
+	//		{
+	//			extract(c, part, path);
+	//		}
+	//		else
+	//		{
+	//			printf("skipped %s of type %s\n", part, type);
+	//		}
+	//	}
+	//	opcContainerClose(c, OPC_CLOSE_NOW);
+	//}
+	//opcFreeLibrary();
+	//m_strImage = path;
 
 	return readImageFile();
 }
@@ -763,12 +763,4 @@ void CImageReader::imageHeight(const FunctionCallbackInfo<Value>& args)
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
 
 	args.GetReturnValue().Set(obj->getHeight());
-}
-
-void CImageReader::errorReason(const FunctionCallbackInfo<Value>& args)
-{
-	Isolate* isolate = args.GetIsolate();
-	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-
-	args.GetReturnValue().Set(String::NewFromUtf8(isolate, obj->m_strImageMgickError.toLatin1().constData()));
 }

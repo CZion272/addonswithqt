@@ -12,7 +12,6 @@
 #include <QFileInfo>
 #include <MagickCore/MagickCore.h>
 #include <direct.h>
-//#include <Magick++.h> 
 #include <node_object_wrap.h>
 
 using namespace v8;
@@ -95,7 +94,6 @@ private:
 	static void afterReadImageWorkerCb(uv_work_t * req, int status);
 	static void readImageWorkerCb(uv_work_t * req);
 
-	static void errorReason(const FunctionCallbackInfo<Value>& args);
 private:
 	static v8::Persistent<v8::Function> m_pConstructor;
 
