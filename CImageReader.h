@@ -66,6 +66,7 @@ private:
 
 	bool compareColorEx(QColor color);
 
+	bool pingImageFile();
 	bool readImageFile();
 	bool readCdrPerviewFile();
 	bool readPPT();
@@ -82,6 +83,7 @@ private:
 	static void setPreviewSize(const FunctionCallbackInfo<Value>& args);
 	static void setMiddleFile(const FunctionCallbackInfo<Value>& args);//CDR AI PPT等无法直接预览的格式需要
 	static void readFile(const FunctionCallbackInfo<Value>& args);
+	static void pingFileInfo(const FunctionCallbackInfo<Value>& args);
 	static void cancel(const FunctionCallbackInfo<Value>& args);
 
 	//获取文件属性

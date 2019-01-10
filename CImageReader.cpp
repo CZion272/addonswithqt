@@ -128,6 +128,7 @@ void CImageReader::Init(Local<Object> exports)
 	NODE_SET_PROTOTYPE_METHOD(tpl, "setMiddleFile", setMiddleFile);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "setPreviewSize", setPreviewSize);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "readFile", readFile);
+	NODE_SET_PROTOTYPE_METHOD(tpl, "pingFileInfo", pingFileInfo);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "cancel", cancel);
 
 	NODE_SET_PROTOTYPE_METHOD(tpl, "compareColor", compareColor);
@@ -154,7 +155,6 @@ void CImageReader::readImageWorkerCb(uv_work_t * req)
 
 void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
 {
-	MagickCoreTerminus();
 	ShareData * my_data = static_cast<ShareData *>(req->data);
 	if (status == UV_ECANCELED)
 	{
@@ -257,6 +257,29 @@ bool CImageReader::compareColorEx(QColor color)
 	return false;
 }
 
+bool CImageReader::pingImageFile()
+{
+	ExceptionInfo *exception;
+
+	exception = AcquireExceptionInfo();
+	ImageInfo *imageInfo;
+	imageInfo = CloneImageInfo(NULL);
+	strcpy(imageInfo->filename, m_strImage.toStdString().c_str());
+
+	Image *images = PingImage(imageInfo, exception);
+	if (images == NULL)
+	{
+		return false;
+	}
+	m_nHeight = images->magick_rows;
+	m_nWight = images->magick_columns;
+
+	images = DestroyImage(images);
+	imageInfo = DestroyImageInfo(imageInfo);
+	exception = DestroyExceptionInfo(exception);
+	return true;
+}
+
 void CImageReader::readImage()
 {
 	bool bReadSave = false;
@@ -290,11 +313,8 @@ void CImageReader::readImage()
 	}
 }
 
-QTime t(0, 0, 0);
-
 bool CImageReader::readImageFile()
 {
-	MagickCoreGenesis("", MagickFalse);
 	ExceptionInfo *exception;
 	size_t number_formats;
 	exception = AcquireExceptionInfo();
@@ -309,14 +329,11 @@ bool CImageReader::readImageFile()
 	strcpy(thumbnailsInfo->filename, m_strPreview.toStdString().c_str());
 #endif // DEBUG
 
-	t.start();
-	qDebug() << m_strImage;
-	imageInfo->debug = MagickTrue;
 	Image *images = ReadImage(imageInfo, exception);
-	qDebug() << "read" << t.elapsed();
+
 	if (images == NULL)
 	{
-		qDebug() << exception->reason;
+		qDebug() << exception->reason << exception->description;
 		QImage qImag(m_strImage);
 		if (!qImag.isNull())
 		{
@@ -380,14 +397,7 @@ bool CImageReader::readImageFile()
 			m_fRatio = 1.0;
 		}
 
-		//if (m_strSufix == "gif")
-		{
-			thumbnails = AdaptiveResizeImage(image, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
-		}
-		//else
-		//{
-		//	thumbnails = ScaleImage(image, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
-		//}
+		thumbnails = AdaptiveResizeImage(image, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
 
 		if (!m_strMiddleFile.isEmpty())
 		{
@@ -403,7 +413,6 @@ bool CImageReader::readImageFile()
 		}
 		image = DestroyImage(image);
 	}
-	qDebug() << "scale" << t.elapsed();
 
 	size_t nColors = 0;
 	//创建颜色直方图，排序
@@ -428,7 +437,7 @@ bool CImageReader::readImageFile()
 	QMap<QString, int> mapColor;
 	QList<QColor> lstColor;
 	QList<int> lstColorNumber;
-	qDebug() << "Histogram" << t.elapsed();
+
 	qsort((void *)p, (size_t)nColors, sizeof(*p), HistogramCompare);
 	PixelInfo pixel;
 	GetPixelInfo(thumbnails, &pixel);
@@ -458,7 +467,7 @@ bool CImageReader::readImageFile()
 	*/
 	(void)strcpy(thumbnails->filename, m_strPreview.toStdString().c_str());
 	bool b = WriteImage(thumbnailsInfo, thumbnails, exception);
-	qDebug() << "write" << t.elapsed();
+
 	images = DestroyImageList(images);
 	thumbnails = DestroyImageList(thumbnails);
 	imageInfo = DestroyImageInfo(imageInfo);
@@ -625,6 +634,22 @@ void CImageReader::readFile(const FunctionCallbackInfo<Value>& args)
 	uv_queue_work(uv_default_loop(), &(pReqData->request), readImageWorkerCb, afterReadImageWorkerCb);
 
 	args.GetReturnValue().Set(true);
+}
+
+void CImageReader::pingFileInfo(const FunctionCallbackInfo<Value>& args)
+{
+	Isolate* isolate = args.GetIsolate();
+	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+	QFileInfo info(obj->m_strImage);
+	if (!info.isFile())
+	{
+		isolate->ThrowException(v8::Exception::TypeError(
+			String::NewFromUtf8(isolate, "无效文件")));
+		args.GetReturnValue().Set(false);
+		return;
+	}
+	bool b = obj->pingImageFile();
+	args.GetReturnValue().Set(b);
 }
 
 void CImageReader::cancel(const FunctionCallbackInfo<Value>& args)

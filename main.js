@@ -32,6 +32,10 @@ class CReadImage{
 		this.obj.readFile(funcation);
 	}
 	
+	pingFileInfo(){
+		return this.obj.pingFileInfo();
+	}
+	
 	cancel(){
 		this.obj.cancel();
 	}
