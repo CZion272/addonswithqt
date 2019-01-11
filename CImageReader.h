@@ -64,7 +64,7 @@ private:
 	int getWigth();
 	int getHeight();
 
-	bool compareColorEx(QColor color);
+	bool compareColorEx(QColor color, int nDiff = 10000);
 
 	bool pingImageFile();
 	bool readImageFile();

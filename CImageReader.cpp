@@ -178,7 +178,7 @@ void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
 	//	uv_sem_destroy(&my_data->m_pSemThis);
 	//	g_pSemSave = NULL;
 	//}
-	
+
 	delete my_data;
 	m_pConstructor.Reset();
 }
@@ -222,7 +222,7 @@ int CImageReader::getHeight()
 	return m_nHeight;
 }
 
-bool CImageReader::compareColorEx(QColor color)
+bool CImageReader::compareColorEx(QColor color, int nDiff /*= 50000*/)
 {
 	int h = 0, s = 0, v = 0;
 	QColor hsvColor = color.toHsv();
@@ -250,7 +250,7 @@ bool CImageReader::compareColorEx(QColor color)
 		double dz = z1 - z2;
 
 		qreal rCom = qSqrt((dx * dx + dy * dy + dz * dz));
-		if ((int)rCom < 150000)
+		if ((int)rCom < nDiff)
 		{
 			return true;
 		}
@@ -334,7 +334,19 @@ bool CImageReader::readImageFile()
 	{
 		imageInfo->number_scenes = 1;
 	}
-	Image *images = ReadImage(imageInfo, exception);
+	Image *images;
+	imageInfo->debug = MagickTrue;
+	imageInfo->verbose = MagickTrue;
+	for (int i = 0; i < WebPCompression + 1; i++)
+	{
+		imageInfo->compression = (CompressionType)i;
+		images = ReadImage(imageInfo, exception);
+		if (images != NULL)
+		{
+			break;
+		}
+		MessageBoxA(NULL, QString(exception->reason).toStdString().c_str(), 0, 0);
+	}
 	bool bTemp = false;
 	QString tempFile;
 	if (images == NULL)
@@ -452,13 +464,25 @@ bool CImageReader::readImageFile()
 	}
 
 	size_t nColors = 0;
+	/*
+	  Write the image thumbnail.
+	*/
+	(void)strcpy(thumbnails->filename, m_strPreview.toStdString().c_str());
+	thumbnailsInfo->quality = 10;
+	bool b = WriteImage(thumbnailsInfo, thumbnails, exception);
+
 	//创建颜色直方图，排序
-	QuantizeInfo *quantize = AcquireQuantizeInfo(thumbnailsInfo);
-	CompressImageColormap(thumbnails, exception);
-	QuantizeImage(quantize, thumbnails, exception);
-
+	if (m_strSufix != "ai"
+		|| m_strSufix != "svg"
+		|| m_strSufix != "png")
+	{
+		QuantizeInfo *quantize = AcquireQuantizeInfo(thumbnailsInfo);
+		quantize->number_colors = 10;
+		CompressImageColormap(thumbnails, exception);
+		QuantizeImage(quantize, thumbnails, exception);
+	}
 	PixelInfo *p = GetImageHistogram(thumbnails, &nColors, exception);
-
+	PixelInfo *pCopy = ClonePixelInfo(p);
 	QMap<QString, int> mapColor;
 	QList<QColor> lstColor;
 	QList<int> lstColorNumber;
@@ -467,16 +491,15 @@ bool CImageReader::readImageFile()
 	PixelInfo pixel;
 	GetPixelInfo(thumbnails, &pixel);
 	m_nColorCount = nColors;
+	int nDiff = nColors < 10 ? 5000 : 20000;
 	for (int i = 0; i < (ssize_t)nColors; i++)
 	{
 		pixel = (*p);
-		char color[MAX_PATH] = { 0 };
 		char hex[MAX_PATH] = { 0 };
 		GetColorTuple(&pixel, MagickTrue, hex);
 		QString strHex(hex);
-		strHex = strHex.left(13);
-
-		if (!compareColorEx(QColor(strHex)))
+		strHex = strHex.left(7);
+		if (!compareColorEx(QColor(strHex), nDiff))
 		{
 			//if (m_lstColor.indexOf(QColor(strHex)) == -1)
 			{
@@ -485,12 +508,6 @@ bool CImageReader::readImageFile()
 		}
 		p++;
 	}
-	/*
-	  Write the image thumbnail.
-	*/
-	(void)strcpy(thumbnails->filename, m_strPreview.toStdString().c_str());
-	thumbnailsInfo->quality = 10;
-	bool b = WriteImage(thumbnailsInfo, thumbnails, exception);
 
 	images = DestroyImageList(images);
 	thumbnails = DestroyImageList(thumbnails);
