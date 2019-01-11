@@ -9,6 +9,7 @@
 //#include "opc/opc.h"
 #include <QThread>
 #include <QFile>
+#include "libavcodec/mediacodec.h"
 
 using namespace std;
 //using namespace Magick;
@@ -146,10 +147,10 @@ void CImageReader::Init(Local<Object> exports)
 void CImageReader::readImageWorkerCb(uv_work_t * req)
 {
 	ShareData * my_data = static_cast<ShareData *>(req->data);
-	if (my_data->m_pSemLast)
-	{
-		uv_sem_wait(&my_data->m_pSemLast);
-	}
+	//if (my_data->m_pSemLast)
+	//{
+	//	uv_sem_wait(&my_data->m_pSemLast);
+	//}
 	my_data->obj->readImage();
 }
 
@@ -162,22 +163,22 @@ void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
 		return;
 	}
 
-	if (my_data->m_pSemThis)
-	{
-		uv_sem_post(&my_data->m_pSemThis);
-	}
+	//if (my_data->m_pSemThis)
+	//{
+	//	uv_sem_post(&my_data->m_pSemThis);
+	//}
 
 	Isolate * isolate = my_data->isolate;
 	HandleScope scope(isolate);
 	Local<Function> js_callback = Local<Function>::New(isolate, my_data->js_callback);
 	Local<Value> error = v8::Exception::TypeError(String::NewFromUtf8(isolate, my_data->obj->m_strImageMgickError.toStdString().c_str()));
 	js_callback->Call(isolate->GetCurrentContext()->Global(), 0, &error);
-	if (my_data->m_pSemThis)
-	{
-		uv_sem_destroy(&my_data->m_pSemThis);
-		g_pSemSave = NULL;
-	}
-
+	//if (my_data->m_pSemThis)
+	//{
+	//	uv_sem_destroy(&my_data->m_pSemThis);
+	//	g_pSemSave = NULL;
+	//}
+	
 	delete my_data;
 	m_pConstructor.Reset();
 }
@@ -318,8 +319,9 @@ bool CImageReader::readImageFile()
 	ExceptionInfo *exception;
 	size_t number_formats;
 	exception = AcquireExceptionInfo();
-	ImageInfo *imageInfo, *thumbnailsInfo;
-	imageInfo = CloneImageInfo(NULL);
+	ImageInfo *imageInfo;
+	ImageInfo *thumbnailsInfo;
+	imageInfo = AcquireImageInfo();
 	thumbnailsInfo = CloneImageInfo(NULL);
 #ifdef DEBUG
 	strcpy(imageInfo->filename, "0.svg");
@@ -328,21 +330,24 @@ bool CImageReader::readImageFile()
 	strcpy(imageInfo->filename, m_strImage.toStdString().c_str());
 	strcpy(thumbnailsInfo->filename, m_strPreview.toStdString().c_str());
 #endif // DEBUG
-
+	if (m_strSufix == "psd")
+	{
+		imageInfo->number_scenes = 1;
+	}
 	Image *images = ReadImage(imageInfo, exception);
-
+	bool bTemp = false;
+	QString tempFile;
 	if (images == NULL)
 	{
-		qDebug() << exception->reason << exception->description;
 		QImage qImag(m_strImage);
 		if (!qImag.isNull())
 		{
 			QFileInfo fInfo(imageInfo->filename);
-			QString tempFile(fInfo.baseName() + "." + fInfo.suffix());
+			tempFile = QString(fInfo.baseName() + "." + fInfo.suffix());
 			qImag.save(fInfo.baseName() + "." + "png");
 			strcpy(imageInfo->filename, tempFile.toStdString().c_str());
 			images = ReadImage(imageInfo, exception);
-			QFile::remove(tempFile);
+			bTemp = true;
 		}
 		else
 		{
@@ -359,11 +364,10 @@ bool CImageReader::readImageFile()
 
 	Image *thumbnails = NewImageList();
 
-	Image *image = NULL;
-	if ((image = RemoveFirstImageFromList(&images)) != (Image *)NULL)
+	//if ((image = RemoveFirstImageFromList(&images)) != (Image *)NULL)
 	{
-		m_nHeight = image->magick_rows;
-		m_nWight = image->magick_columns;
+		m_nHeight = images->magick_rows;
+		m_nWight = images->magick_columns;
 
 		if (m_nHeight == 0 || m_nWight == 0)
 		{
@@ -396,8 +400,26 @@ bool CImageReader::readImageFile()
 		{
 			m_fRatio = 1.0;
 		}
+		if (m_strSufix == "psd")
+		{
+			thumbnails = ThumbnailImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
+		}
+		else
+		{
+			thumbnails = AdaptiveResizeImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
+		}
 
-		thumbnails = AdaptiveResizeImage(image, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
+		if (thumbnails == NULL)
+		{
+			m_strImageMgickError = exception->reason;
+			images = DestroyImageList(images);
+			thumbnails = DestroyImageList(thumbnails);
+			imageInfo = DestroyImageInfo(imageInfo);
+			thumbnailsInfo = DestroyImageInfo(thumbnailsInfo);
+			exception = DestroyExceptionInfo(exception);
+			return false;
+		}
+
 
 		if (!m_strMiddleFile.isEmpty())
 		{
@@ -407,33 +429,36 @@ bool CImageReader::readImageFile()
 				|| m_strSufix != "cdr"
 				)
 			{
+				Image *image = NewImageList();
+				ImageInfo *midInfo = CloneImageInfo(imageInfo);
+				midInfo->quality = 10;
+				if (m_strSufix == "psd")
+				{
+					image = ThumbnailImage(images, m_nWight, m_nHeight, exception);
+				}
+				else
+				{
+					image = AdaptiveResizeImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
+				}
+
 				(void)strcpy(image->filename, m_strMiddleFile.toStdString().c_str());
-				WriteImage(imageInfo, image, exception);
+				(void)strcpy(midInfo->filename, m_strMiddleFile.toStdString().c_str());
+				WriteImage(midInfo, image, exception);
+
+				image = DestroyImage(image);
+				midInfo = DestroyImageInfo(midInfo);
 			}
 		}
-		image = DestroyImage(image);
 	}
 
 	size_t nColors = 0;
 	//创建颜色直方图，排序
-	if (thumbnails == NULL)
-	{
-		m_strImageMgickError = exception->reason;
-		images = DestroyImageList(images);
-		thumbnails = DestroyImageList(thumbnails);
-		imageInfo = DestroyImageInfo(imageInfo);
-		thumbnailsInfo = DestroyImageInfo(thumbnailsInfo);
-		exception = DestroyExceptionInfo(exception);
-		return false;
-	}
-
 	QuantizeInfo *quantize = AcquireQuantizeInfo(thumbnailsInfo);
-	//压缩图片颜色，操作时间比较长，可以有效缩小缩略图大小
-	//SetImageColorspace(thumbnails, RGBColorspace, exception);
 	CompressImageColormap(thumbnails, exception);
 	QuantizeImage(quantize, thumbnails, exception);
 
 	PixelInfo *p = GetImageHistogram(thumbnails, &nColors, exception);
+
 	QMap<QString, int> mapColor;
 	QList<QColor> lstColor;
 	QList<int> lstColorNumber;
@@ -458,14 +483,13 @@ bool CImageReader::readImageFile()
 				m_lstColor.append(QColor(strHex));
 			}
 		}
-
-
 		p++;
 	}
 	/*
 	  Write the image thumbnail.
 	*/
 	(void)strcpy(thumbnails->filename, m_strPreview.toStdString().c_str());
+	thumbnailsInfo->quality = 10;
 	bool b = WriteImage(thumbnailsInfo, thumbnails, exception);
 
 	images = DestroyImageList(images);
@@ -474,6 +498,10 @@ bool CImageReader::readImageFile()
 	thumbnailsInfo = DestroyImageInfo(thumbnailsInfo);
 	m_strImageMgickError = exception->reason;
 	exception = DestroyExceptionInfo(exception);
+	if (bTemp)
+	{
+		QFile::remove(tempFile);
+	}
 	return b;
 }
 
@@ -626,11 +654,11 @@ void CImageReader::readFile(const FunctionCallbackInfo<Value>& args)
 	pReqData->obj = obj;
 	obj->m_pReqData = pReqData;
 	//libuv线程池执行读取，异步回调
-	uv_sem_t sem;
-	uv_sem_init(&sem, 0);
-	pReqData->m_pSemLast = g_pSemSave;
-	g_pSemSave = sem;
-	pReqData->m_pSemThis = sem;
+	//uv_sem_t sem;
+	//uv_sem_init(&sem, 0);
+	//pReqData->m_pSemLast = g_pSemSave;
+	//g_pSemSave = sem;
+	//pReqData->m_pSemThis = sem;
 	uv_queue_work(uv_default_loop(), &(pReqData->request), readImageWorkerCb, afterReadImageWorkerCb);
 
 	args.GetReturnValue().Set(true);
