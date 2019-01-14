@@ -147,10 +147,10 @@ void CImageReader::Init(Local<Object> exports)
 void CImageReader::readImageWorkerCb(uv_work_t * req)
 {
 	ShareData * my_data = static_cast<ShareData *>(req->data);
-	//if (my_data->m_pSemLast)
-	//{
-	//	uv_sem_wait(&my_data->m_pSemLast);
-	//}
+	if (my_data->m_pSemLast)
+	{
+		uv_sem_wait(&my_data->m_pSemLast);
+	}
 	my_data->obj->readImage();
 }
 
@@ -163,21 +163,21 @@ void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
 		return;
 	}
 
-	//if (my_data->m_pSemThis)
-	//{
-	//	uv_sem_post(&my_data->m_pSemThis);
-	//}
+	if (my_data->m_pSemThis)
+	{
+		uv_sem_post(&my_data->m_pSemThis);
+	}
 
 	Isolate * isolate = my_data->isolate;
 	HandleScope scope(isolate);
 	Local<Function> js_callback = Local<Function>::New(isolate, my_data->js_callback);
 	Local<Value> error = v8::Exception::TypeError(String::NewFromUtf8(isolate, my_data->obj->m_strImageMgickError.toStdString().c_str()));
 	js_callback->Call(isolate->GetCurrentContext()->Global(), 0, &error);
-	//if (my_data->m_pSemThis)
-	//{
-	//	uv_sem_destroy(&my_data->m_pSemThis);
-	//	g_pSemSave = NULL;
-	//}
+	if (my_data->m_pSemThis)
+	{
+		uv_sem_destroy(&my_data->m_pSemThis);
+		g_pSemSave = NULL;
+	}
 
 	delete my_data;
 	m_pConstructor.Reset();
@@ -400,7 +400,13 @@ bool CImageReader::readImageFile()
 		{
 			m_fRatio = 1.0;
 		}
-		if (m_strSufix == "psd")
+		if (
+			m_strSufix == "psd"
+			|| m_strSufix == "ai"
+			|| m_strSufix == "svg"
+			|| m_strSufix == "png"
+			|| m_strSufix == "gif"
+			)
 		{
 			thumbnails = ThumbnailImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
 		}
@@ -660,11 +666,11 @@ void CImageReader::readFile(const FunctionCallbackInfo<Value>& args)
 	pReqData->obj = obj;
 	obj->m_pReqData = pReqData;
 	//libuv线程池执行读取，异步回调
-	//uv_sem_t sem;
-	//uv_sem_init(&sem, 0);
-	//pReqData->m_pSemLast = g_pSemSave;
-	//g_pSemSave = sem;
-	//pReqData->m_pSemThis = sem;
+	uv_sem_t sem;
+	uv_sem_init(&sem, 0);
+	pReqData->m_pSemLast = g_pSemSave;
+	g_pSemSave = sem;
+	pReqData->m_pSemThis = sem;
 	uv_queue_work(uv_default_loop(), &(pReqData->request), readImageWorkerCb, afterReadImageWorkerCb);
 
 	args.GetReturnValue().Set(true);
