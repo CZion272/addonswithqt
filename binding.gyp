@@ -24,7 +24,6 @@
 	  ],
 	  "include_dirs": [
 		 "../quazip",
-		 "ffmpeg/include",
 		 "<(MAGICK_ROOT)/include",
 		 "$(QTDIR)/include",
 		 "$(QTDIR)/include/QtGui",
@@ -65,14 +64,6 @@
 		 "../magick/lib/CORE_RL_webp_.lib",
 		 "../magick/lib/CORE_RL_zlib_.lib",
 		 "../magick/lib/CORE_RL_flif_.lib",
-		 "../ffmpeg/lib/avcodec.lib",
-		 "../ffmpeg/lib/avdevice.lib",
-		 "../ffmpeg/lib/avfilter.lib",
-		 "../ffmpeg/lib/avformat.lib",
-		 "../ffmpeg/lib/avutil.lib",
-		 "../ffmpeg/lib/postproc.lib",
-		 "../ffmpeg/lib/swresample.lib",
-		 "../ffmpeg/lib/swscale.lib",
 		 "$(QTDIR)/lib/Qt5Gui.lib",		 
 		 "$(QTDIR)/lib/Qt5Core.lib"
 		 ],

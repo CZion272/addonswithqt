@@ -4,7 +4,7 @@ var binding_path = binary.find(path.resolve(path.join(__dirname,'./package.json'
 var binding = require(binding_path);
 
 exports.hasColor = function hasColor(color, list){
-	binding.hasColor(color, list)
+	return binding.hasColor(color, list)
 }
 
 class CReadImage{
