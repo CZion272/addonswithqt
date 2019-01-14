@@ -57,16 +57,18 @@ namespace qtAddons
 				String::NewFromUtf8(isolate, "²ÎÊý´íÎó")));
 			return;
 		}
-		int i = 1;
+
 		v8::String::Utf8Value str(args[0]->ToString());
 		QString strColor = *str;
+
+		v8::String::Utf8Value str1(args[1]->ToString());
+		QString strColorList = *str1;
+
+		QStringList lstStrColor = strColorList.split(",");
 		QList<QColor> lstColor;
-		while (args[i]->IsString())
+		foreach (QString str, lstStrColor)
 		{
-			v8::String::Utf8Value strL(args[i]->ToString());
-			QString strColorList = *strL;
-			lstColor.append(QColor(strColorList));
-			i++;
+			lstColor.append(QColor(str));
 		}
 
 		args.GetReturnValue().Set(compareColorEx(QColor(strColor), lstColor));
