@@ -44,6 +44,7 @@
 		 "../magick/lib/CORE_RL_filters_.lib",
 		 "../magick/lib/CORE_RL_flif_.lib",
 		 "../magick/lib/CORE_RL_glib_.lib",
+		 "../magick/lib/CORE_RL_jbig_.lib",
 		 "../magick/lib/CORE_RL_jp2_.lib",
 		 "../magick/lib/CORE_RL_jpeg_.lib",
 		 "../magick/lib/CORE_RL_lcms_.lib",

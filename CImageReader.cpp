@@ -334,19 +334,7 @@ bool CImageReader::readImageFile()
 	{
 		imageInfo->number_scenes = 1;
 	}
-	Image *images;
-	imageInfo->debug = MagickTrue;
-	imageInfo->verbose = MagickTrue;
-	for (int i = 0; i < WebPCompression + 1; i++)
-	{
-		imageInfo->compression = (CompressionType)i;
-		images = ReadImage(imageInfo, exception);
-		if (images != NULL)
-		{
-			break;
-		}
-		MessageBoxA(NULL, QString(exception->reason).toStdString().c_str(), 0, 0);
-	}
+	Image *images = ReadImage(imageInfo, exception);
 	bool bTemp = false;
 	QString tempFile;
 	if (images == NULL)
@@ -450,11 +438,12 @@ bool CImageReader::readImageFile()
 				}
 				else
 				{
-					image = AdaptiveResizeImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
+					image = AdaptiveResizeImage(images, m_nWight, m_nHeight, exception);
 				}
 
 				(void)strcpy(image->filename, m_strMiddleFile.toStdString().c_str());
 				(void)strcpy(midInfo->filename, m_strMiddleFile.toStdString().c_str());
+
 				WriteImage(midInfo, image, exception);
 
 				image = DestroyImage(image);
