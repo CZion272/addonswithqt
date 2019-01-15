@@ -7,7 +7,7 @@ exports.hasColor = function hasColor(color, list){
 	return binding.hasColor(color, list)
 }
 
-class CReadImage{
+exports.CReadImage = class CReadImage{
     constructor(imagePath, savepath){
         this.obj = new binding.CImageReader(imagePath, savepath);
     }
@@ -68,4 +68,3 @@ class CReadImage{
 		return this.obj.imageHeight();
 	}
 }
-window.CReadImage = CReadImage;
