@@ -6,13 +6,12 @@
 #include <QTimer>
 #include <QCryptographicHash>
 #include <QTemporaryFile>
-//#include "opc/opc.h"
 #include <QThread>
 #include <QFile>
-#include "libavcodec/mediacodec.h"
+#include <QProcess>
+#include "office.h"
 
 using namespace std;
-//using namespace Magick;
 Persistent<Function> CImageReader::m_pConstructor;
 
 static double gR = 100;
@@ -31,43 +30,6 @@ static int HistogramCompare(const void *x, const void *y)
 	color_2 = (const PixelInfo *)y;
 	return((int)color_2->count - (int)color_1->count);
 }
-
-//ppt导出预览图片
-//static void extract(opcContainer *c, opcPart p, const char *path)
-//{
-//	char filename[OPC_MAX_PATH];
-//	opc_uint32_t i = xmlStrlen(p);
-//	while (i > 0 && p[i] != '/')
-//	{
-//		i--;
-//	}
-//	if (p[i] == '/')
-//	{
-//		i++;
-//	}
-//	QString strType((char*)(p + i));
-//	if (!strType.contains("thumbnail"))
-//	{
-//		return;
-//	}
-//	strcpy(filename, path);
-//	FILE *out = fopen(filename, "wb");
-//	if (NULL != out)
-//	{
-//		opcContainerInputStream *stream = opcContainerOpenInputStream(c, p);
-//		if (NULL != stream)
-//		{
-//			opc_uint32_t  ret = 0;
-//			opc_uint8_t buf[100];
-//			while ((ret = opcContainerReadInputStream(stream, buf, sizeof(buf))) > 0)
-//			{
-//				fwrite(buf, sizeof(char), ret, out);
-//			}
-//			opcContainerCloseInputStream(stream);
-//		}
-//		fclose(out);
-//	}
-//}
 
 uv_sem_t g_pSemSave = NULL;
 
@@ -138,19 +100,28 @@ void CImageReader::Init(Local<Object> exports)
 	NODE_SET_PROTOTYPE_METHOD(tpl, "imageWidth", imageWidth);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "imageHeight", imageHeight);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "MD5", MD5);
+	NODE_SET_PROTOTYPE_METHOD(tpl, "release", release);
 
 	m_pConstructor.Reset(isolate, tpl->GetFunction());
 	exports->Set(String::NewFromUtf8(isolate, "CImageReader"),
 		tpl->GetFunction());
 }
 
+void CImageReader::release(const FunctionCallbackInfo<Value>& args)
+{
+	Isolate* isolate = args.GetIsolate();
+	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+	delete obj->m_pReqData;
+	m_pConstructor.Reset();
+}
+
 void CImageReader::readImageWorkerCb(uv_work_t * req)
 {
 	ShareData * my_data = static_cast<ShareData *>(req->data);
-	if (my_data->m_pSemLast)
-	{
-		uv_sem_wait(&my_data->m_pSemLast);
-	}
+	//if (my_data->m_pSemLast)
+	//{
+	//	uv_sem_wait(&my_data->m_pSemLast);
+	//}
 	my_data->obj->readImage();
 }
 
@@ -159,28 +130,28 @@ void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
 	ShareData * my_data = static_cast<ShareData *>(req->data);
 	if (status == UV_ECANCELED)
 	{
-		delete my_data;
+		//delete my_data;
 		return;
 	}
 
-	if (my_data->m_pSemThis)
-	{
-		uv_sem_post(&my_data->m_pSemThis);
-	}
+	//if (my_data->m_pSemThis)
+	//{
+	//	uv_sem_post(&my_data->m_pSemThis);
+	//}
 
 	Isolate * isolate = my_data->isolate;
 	HandleScope scope(isolate);
 	Local<Function> js_callback = Local<Function>::New(isolate, my_data->js_callback);
 	Local<Value> error = v8::Exception::TypeError(String::NewFromUtf8(isolate, my_data->obj->m_strImageMgickError.toStdString().c_str()));
 	js_callback->Call(isolate->GetCurrentContext()->Global(), 0, &error);
-	if (my_data->m_pSemThis)
-	{
-		uv_sem_destroy(&my_data->m_pSemThis);
-		g_pSemSave = NULL;
-	}
+	//if (my_data->m_pSemThis)
+	//{
+	//	uv_sem_destroy(&my_data->m_pSemThis);
+	//	g_pSemSave = NULL;
+	//}
 
-	delete my_data;
-	m_pConstructor.Reset();
+	//delete my_data;
+	//m_pConstructor.Reset();
 }
 
 void CImageReader::New(const FunctionCallbackInfo<Value>& args)
@@ -337,24 +308,6 @@ bool CImageReader::readImageFile()
 	Image *images = ReadImage(imageInfo, exception);
 	bool bTemp = false;
 	QString tempFile;
-	if (images == NULL)
-	{
-		QImage qImag(m_strImage);
-		if (!qImag.isNull())
-		{
-			QFileInfo fInfo(imageInfo->filename);
-			tempFile = QString(fInfo.baseName() + "." + fInfo.suffix());
-			qImag.save(fInfo.baseName() + "." + "png");
-			strcpy(imageInfo->filename, tempFile.toStdString().c_str());
-			images = ReadImage(imageInfo, exception);
-			bTemp = true;
-		}
-		else
-		{
-			m_strImageMgickError = exception->reason;
-			return false;
-		}
-	}
 
 	if (images == NULL)
 	{
@@ -400,20 +353,8 @@ bool CImageReader::readImageFile()
 		{
 			m_fRatio = 1.0;
 		}
-		if (
-			m_strSufix == "psd"
-			|| m_strSufix == "ai"
-			|| m_strSufix == "svg"
-			|| m_strSufix == "png"
-			|| m_strSufix == "gif"
-			)
-		{
-			thumbnails = ThumbnailImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
-		}
-		else
-		{
-			thumbnails = AdaptiveResizeImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
-		}
+
+		thumbnails = ThumbnailImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
 
 		if (thumbnails == NULL)
 		{
@@ -431,21 +372,15 @@ bool CImageReader::readImageFile()
 		{
 			if (//ppt和cdr均已保存过中间文件
 				m_strSufix != "ppt"
-				|| m_strSufix != "pptx"
-				|| m_strSufix != "cdr"
+				&& m_strSufix != "pptx"
+				&& m_strSufix != "cdr"
 				)
 			{
 				Image *image = NewImageList();
 				ImageInfo *midInfo = CloneImageInfo(imageInfo);
 				midInfo->quality = 10;
-				if (m_strSufix == "psd")
-				{
-					image = ThumbnailImage(images, m_nWight, m_nHeight, exception);
-				}
-				else
-				{
-					image = AdaptiveResizeImage(images, m_nWight, m_nHeight, exception);
-				}
+
+				image = ThumbnailImage(images, m_nWight, m_nHeight, exception);
 
 				(void)strcpy(image->filename, m_strMiddleFile.toStdString().c_str());
 				(void)strcpy(midInfo->filename, m_strMiddleFile.toStdString().c_str());
@@ -551,35 +486,16 @@ bool CImageReader::readCdrPerviewFile()
 
 bool CImageReader::readPPT()
 {
-	//opcInitLibrary();
-	//opcContainer *c = opcContainerOpen(_X(m_strImage.toStdString().c_str()), OPC_OPEN_READ_ONLY, NULL, NULL);
-
-	//const char * path = m_strMiddleFile.isEmpty() ? m_strPreview.toStdString().c_str() : m_strMiddleFile.toStdString().c_str();
-
-	//if (NULL != c)
-	//{
-	//	for (opcPart part = opcPartGetFirst(c); OPC_PART_INVALID != part; part = opcPartGetNext(c, part))
-	//	{
-	//		const xmlChar *type = opcPartGetType(c, part);
-	//		if (xmlStrcmp(type, _X("image/jpeg")) == 0)
-	//		{
-	//			extract(c, part, path);
-	//		}
-	//		else if (xmlStrcmp(type, _X("image/png")) == 0)
-	//		{
-	//			extract(c, part, path);
-	//		}
-	//		else
-	//		{
-	//			printf("skipped %s of type %s\n", part, type);
-	//		}
-	//	}
-	//	opcContainerClose(c, OPC_CLOSE_NOW);
-	//}
-	//opcFreeLibrary();
-	//m_strImage = path;
-
-	return readImageFile();
+	bool b = false;
+	qDebug() << QFile(m_strImage).exists();
+	PPT2Image(m_strImage, "tempppt.png");
+	if (QFile("tempppt.png").exists())
+	{
+		m_strImage = "tempppt.png";
+		b = readImageFile();
+		QFile("tempppt.png").remove();
+	}
+	return b;
 }
 
 void CImageReader::setDefaultColorList(const FunctionCallbackInfo<Value>& args)
@@ -666,11 +582,11 @@ void CImageReader::readFile(const FunctionCallbackInfo<Value>& args)
 	pReqData->obj = obj;
 	obj->m_pReqData = pReqData;
 	//libuv线程池执行读取，异步回调
-	uv_sem_t sem;
-	uv_sem_init(&sem, 0);
-	pReqData->m_pSemLast = g_pSemSave;
-	g_pSemSave = sem;
-	pReqData->m_pSemThis = sem;
+	//uv_sem_t sem;
+	//uv_sem_init(&sem, 0);
+	//pReqData->m_pSemLast = g_pSemSave;
+	//g_pSemSave = sem;
+	//pReqData->m_pSemThis = sem;
 	uv_queue_work(uv_default_loop(), &(pReqData->request), readImageWorkerCb, afterReadImageWorkerCb);
 
 	args.GetReturnValue().Set(true);

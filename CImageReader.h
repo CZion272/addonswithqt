@@ -96,6 +96,8 @@ private:
 	static void afterReadImageWorkerCb(uv_work_t * req, int status);
 	static void readImageWorkerCb(uv_work_t * req);
 
+	static void release(const FunctionCallbackInfo<Value>& args);
+
 private:
 	static v8::Persistent<v8::Function> m_pConstructor;
 
