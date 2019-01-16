@@ -13,6 +13,7 @@
 
 using namespace std;
 Persistent<Function> CImageReader::m_pConstructor;
+static QString g_strFFMpegPath;
 
 static double gR = 100;
 static double gAngle = 30;
@@ -113,6 +114,11 @@ void CImageReader::readImageWorkerCb(uv_work_t * req)
 	my_data->obj->readImage();
 }
 
+void CImageReader::setFFMpeg(QString strPath)
+{
+	g_strFFMpegPath = strPath;
+}
+
 void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
 {
 	ShareData * my_data = static_cast<ShareData *>(req->data);
@@ -125,7 +131,14 @@ void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
 	HandleScope scope(isolate);
 	Local<Function> js_callback = Local<Function>::New(isolate, my_data->js_callback);
 	Local<Value> error = v8::Exception::TypeError(String::NewFromUtf8(isolate, my_data->obj->m_strImageMgickError.toStdString().c_str()));
-	js_callback->Call(isolate->GetCurrentContext()->Global(), 0, &error);
+	if (!my_data->obj->m_strImageMgickError.isEmpty())
+	{
+		js_callback->Call(isolate->GetCurrentContext()->Global(), 1, &error);
+	}
+	else
+	{
+		js_callback->Call(isolate->GetCurrentContext()->Global(), 0, 0);
+	}
 }
 
 void CImageReader::New(const FunctionCallbackInfo<Value>& args)
@@ -137,7 +150,7 @@ void CImageReader::New(const FunctionCallbackInfo<Value>& args)
 		)
 	{
 		isolate->ThrowException(v8::Exception::TypeError(
-			String::NewFromUtf8(isolate, "参数错误")));
+			String::NewFromUtf8(isolate, "Parameter error")));
 		args.GetReturnValue().Set(FALSE);
 		return;
 	}
@@ -257,6 +270,11 @@ void CImageReader::readImage()
 		bReadSave = readImageFile();
 		break;
 	}
+	//如果im无法读取，尝试使用ffmpeg读取
+	if (!bReadSave)
+	{
+		bReadSave = readVideo();
+	}
 }
 
 bool CImageReader::readImageFile()
@@ -279,7 +297,7 @@ bool CImageReader::readImageFile()
 	strcpy(imageInfo->filename, "0.svg");
 	strcpy(thumbnailsInfo->filename, "0.png");
 #else
-	strcpy(imageInfo->filename, m_strImage.toStdString().c_str());
+	strcpy(imageInfo->filename, m_strVideo.isEmpty() ? m_strImage.toStdString().c_str() : m_strVideo.toStdString().c_str());
 	strcpy(thumbnailsInfo->filename, m_strPreview.toStdString().c_str());
 #endif // DEBUG
 	//if (m_strSufix == "psd")
@@ -463,6 +481,7 @@ bool CImageReader::readCdrPerviewFile()
 			return readImageFile();
 		}
 	}
+	m_strImageMgickError = "invaild cdr file";
 	return false;
 }
 
@@ -480,13 +499,39 @@ bool CImageReader::readPPT()
 	return b;
 }
 
+bool CImageReader::readVideo()
+{
+	if (g_strFFMpegPath.isEmpty())
+	{
+		return false;
+	}
+	QProcess process;
+	QStringList lstArgs;
+	lstArgs.append("-i");
+	lstArgs.append(m_strImage);
+	lstArgs.append("-y");
+	lstArgs.append("tempVideo.png");
+	process.start(g_strFFMpegPath, lstArgs);
+	if (process.waitForFinished(-1))
+	{
+		if (QFile("tempVideo.png").exists())
+		{
+			m_strVideo = "tempVideo.png";
+			bool b = readImageFile();
+			QFile().remove("tempVideo.png");
+			return b;
+		}
+	}
+	return false;
+}
+
 void CImageReader::setDefaultColorList(const FunctionCallbackInfo<Value>& args)
 {
 	Isolate* isolate = args.GetIsolate();
 	if (!args[0]->IsString() || !args[1]->IsString())
 	{
 		isolate->ThrowException(v8::Exception::TypeError(
-			String::NewFromUtf8(isolate, "参数错误")));
+			String::NewFromUtf8(isolate, "Parameter error")));
 		return;
 	}
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
@@ -511,7 +556,7 @@ void CImageReader::setDefaultImageSize(const FunctionCallbackInfo<Value>& args)
 	if (!args[0]->IsNumber() || !args[1]->IsNumber())
 	{
 		isolate->ThrowException(v8::Exception::TypeError(
-			String::NewFromUtf8(isolate, "参数错误")));
+			String::NewFromUtf8(isolate, "Parameter error")));
 		return;
 	}
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
@@ -526,7 +571,7 @@ void CImageReader::setDefaultMD5(const FunctionCallbackInfo<Value>& args)
 	if (!args[0]->IsString())
 	{
 		isolate->ThrowException(v8::Exception::TypeError(
-			String::NewFromUtf8(isolate, "参数错误")));
+			String::NewFromUtf8(isolate, "Parameter error")));
 		return;
 	}
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
@@ -542,7 +587,7 @@ void CImageReader::readFile(const FunctionCallbackInfo<Value>& args)
 	if (!args[0]->IsFunction())
 	{
 		isolate->ThrowException(v8::Exception::TypeError(
-			String::NewFromUtf8(isolate, "参数错误")));
+			String::NewFromUtf8(isolate, "Parameter error")));
 		return;
 	}
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
@@ -551,7 +596,7 @@ void CImageReader::readFile(const FunctionCallbackInfo<Value>& args)
 	if (!info.isFile())
 	{
 		isolate->ThrowException(v8::Exception::TypeError(
-			String::NewFromUtf8(isolate, "无效文件")));
+			String::NewFromUtf8(isolate, "Invalid file")));
 		args.GetReturnValue().Set(false);
 		return;
 	}
@@ -577,7 +622,7 @@ void CImageReader::pingFileInfo(const FunctionCallbackInfo<Value>& args)
 	if (!info.isFile())
 	{
 		isolate->ThrowException(v8::Exception::TypeError(
-			String::NewFromUtf8(isolate, "无效文件")));
+			String::NewFromUtf8(isolate, "Invalid file or video")));
 		args.GetReturnValue().Set(false);
 		return;
 	}
@@ -605,7 +650,7 @@ void CImageReader::setPreviewSize(const FunctionCallbackInfo<Value>& args)
 	if (!args[0]->IsNumber() || !args[1]->IsNumber())
 	{
 		isolate->ThrowException(v8::Exception::TypeError(
-			String::NewFromUtf8(isolate, "参数错误")));
+			String::NewFromUtf8(isolate, "Parameter error")));
 		args.GetReturnValue().Set(FALSE);
 		return;
 	}
@@ -620,7 +665,7 @@ void CImageReader::setMiddleFile(const FunctionCallbackInfo<Value>& args)
 	if (!args[0]->IsString())
 	{
 		isolate->ThrowException(v8::Exception::TypeError(
-			String::NewFromUtf8(isolate, "参数错误")));
+			String::NewFromUtf8(isolate, "Parameter error")));
 		args.GetReturnValue().Set(FALSE);
 		return;
 	}
@@ -636,7 +681,7 @@ void CImageReader::compareColor(const FunctionCallbackInfo<Value>& args)
 	if (!args[0]->IsString())
 	{
 		isolate->ThrowException(v8::Exception::TypeError(
-			String::NewFromUtf8(isolate, "参数错误")));
+			String::NewFromUtf8(isolate, "Parameter error")));
 		args.GetReturnValue().Set(FALSE);
 		return;
 	}
@@ -645,7 +690,7 @@ void CImageReader::compareColor(const FunctionCallbackInfo<Value>& args)
 	if (color.isValid())
 	{
 		isolate->ThrowException(v8::Exception::TypeError(
-			String::NewFromUtf8(isolate, "参数错误")));
+			String::NewFromUtf8(isolate, "Parameter error")));
 		args.GetReturnValue().Set(FALSE);
 		return;
 	}
@@ -662,7 +707,7 @@ void CImageReader::MD5(const FunctionCallbackInfo<Value>& args)
 	if (!file.open(QFile::ReadOnly))
 	{
 		isolate->ThrowException(v8::Exception::TypeError(
-			String::NewFromUtf8(isolate, "文件打开失败")));
+			String::NewFromUtf8(isolate, "File open failed")));
 		args.GetReturnValue().Set(FALSE);
 	}
 
@@ -688,7 +733,7 @@ void CImageReader::colorAt(const FunctionCallbackInfo<Value>& args)
 	if (!args[0]->IsNumber())
 	{
 		isolate->ThrowException(v8::Exception::TypeError(
-			String::NewFromUtf8(isolate, "参数错误")));
+			String::NewFromUtf8(isolate, "Parameter error")));
 		args.GetReturnValue().Set(FALSE);
 		return;
 	}
