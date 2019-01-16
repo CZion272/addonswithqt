@@ -228,7 +228,33 @@ bool CImageReader::pingImageFile()
 	Image *images = PingImage(imageInfo, exception);
 	if (images == NULL)
 	{
-		return false;
+		if (g_strFFMpegPath.isEmpty())
+		{
+			return false;
+		}
+		QProcess process;
+		QStringList lstArgs;
+		lstArgs.append("-i");
+		lstArgs.append(m_strImage);
+		lstArgs.append("-y");
+		lstArgs.append("tempVideo.png");
+		process.start(g_strFFMpegPath, lstArgs);
+		if (process.waitForFinished(-1))
+		{
+			if (QFile("tempVideo.png").exists())
+			{
+				strcpy(imageInfo->filename, "tempVideo.png");
+				images = PingImage(imageInfo, exception);
+			}
+			else
+			{
+				return false;
+			}
+		}
+		else
+		{
+			return false;
+		}
 	}
 	m_nHeight = images->magick_rows;
 	m_nWight = images->magick_columns;
