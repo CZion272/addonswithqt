@@ -100,28 +100,16 @@ void CImageReader::Init(Local<Object> exports)
 	NODE_SET_PROTOTYPE_METHOD(tpl, "imageWidth", imageWidth);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "imageHeight", imageHeight);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "MD5", MD5);
-	NODE_SET_PROTOTYPE_METHOD(tpl, "release", release);
 
 	m_pConstructor.Reset(isolate, tpl->GetFunction());
 	exports->Set(String::NewFromUtf8(isolate, "CImageReader"),
 		tpl->GetFunction());
 }
 
-void CImageReader::release(const FunctionCallbackInfo<Value>& args)
-{
-	Isolate* isolate = args.GetIsolate();
-	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-	delete obj->m_pReqData;
-	m_pConstructor.Reset();
-}
-
 void CImageReader::readImageWorkerCb(uv_work_t * req)
 {
 	ShareData * my_data = static_cast<ShareData *>(req->data);
-	//if (my_data->m_pSemLast)
-	//{
-	//	uv_sem_wait(&my_data->m_pSemLast);
-	//}
+
 	my_data->obj->readImage();
 }
 
@@ -130,28 +118,14 @@ void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
 	ShareData * my_data = static_cast<ShareData *>(req->data);
 	if (status == UV_ECANCELED)
 	{
-		//delete my_data;
 		return;
 	}
-
-	//if (my_data->m_pSemThis)
-	//{
-	//	uv_sem_post(&my_data->m_pSemThis);
-	//}
 
 	Isolate * isolate = my_data->isolate;
 	HandleScope scope(isolate);
 	Local<Function> js_callback = Local<Function>::New(isolate, my_data->js_callback);
 	Local<Value> error = v8::Exception::TypeError(String::NewFromUtf8(isolate, my_data->obj->m_strImageMgickError.toStdString().c_str()));
 	js_callback->Call(isolate->GetCurrentContext()->Global(), 0, &error);
-	//if (my_data->m_pSemThis)
-	//{
-	//	uv_sem_destroy(&my_data->m_pSemThis);
-	//	g_pSemSave = NULL;
-	//}
-
-	//delete my_data;
-	//m_pConstructor.Reset();
 }
 
 void CImageReader::New(const FunctionCallbackInfo<Value>& args)
@@ -287,13 +261,20 @@ void CImageReader::readImage()
 
 bool CImageReader::readImageFile()
 {
-	ExceptionInfo *exception;
 	size_t number_formats;
+
+	ExceptionInfo *exception;
 	exception = AcquireExceptionInfo();
+
 	ImageInfo *imageInfo;
 	ImageInfo *thumbnailsInfo;
+
 	imageInfo = AcquireImageInfo();
 	thumbnailsInfo = CloneImageInfo(NULL);
+
+	Image *images;
+	Image *thumbnails;
+
 #ifdef DEBUG
 	strcpy(imageInfo->filename, "0.svg");
 	strcpy(thumbnailsInfo->filename, "0.png");
@@ -301,11 +282,11 @@ bool CImageReader::readImageFile()
 	strcpy(imageInfo->filename, m_strImage.toStdString().c_str());
 	strcpy(thumbnailsInfo->filename, m_strPreview.toStdString().c_str());
 #endif // DEBUG
-	if (m_strSufix == "psd")
+	//if (m_strSufix == "psd")
 	{
 		imageInfo->number_scenes = 1;
 	}
-	Image *images = ReadImage(imageInfo, exception);
+	images = ReadImage(imageInfo, exception);
 	bool bTemp = false;
 	QString tempFile;
 
@@ -315,7 +296,7 @@ bool CImageReader::readImageFile()
 		return false;
 	}
 
-	Image *thumbnails = NewImageList();
+	thumbnails = NewImageList();
 
 	//if ((image = RemoveFirstImageFromList(&images)) != (Image *)NULL)
 	{
@@ -354,7 +335,7 @@ bool CImageReader::readImageFile()
 			m_fRatio = 1.0;
 		}
 
-		thumbnails = ThumbnailImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
+		thumbnails = AdaptiveResizeImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
 
 		if (thumbnails == NULL)
 		{
@@ -449,6 +430,7 @@ bool CImageReader::readImageFile()
 	{
 		QFile::remove(tempFile);
 	}
+
 	return b;
 }
 
@@ -582,11 +564,6 @@ void CImageReader::readFile(const FunctionCallbackInfo<Value>& args)
 	pReqData->obj = obj;
 	obj->m_pReqData = pReqData;
 	//libuv线程池执行读取，异步回调
-	//uv_sem_t sem;
-	//uv_sem_init(&sem, 0);
-	//pReqData->m_pSemLast = g_pSemSave;
-	//g_pSemSave = sem;
-	//pReqData->m_pSemThis = sem;
 	uv_queue_work(uv_default_loop(), &(pReqData->request), readImageWorkerCb, afterReadImageWorkerCb);
 
 	args.GetReturnValue().Set(true);

@@ -44,9 +44,6 @@ struct ShareData
 	Isolate * isolate;
 	Persistent<Function> js_callback;
 	CImageReader* obj;
-
-	uv_sem_t m_pSemThis = NULL;
-	uv_sem_t m_pSemLast = NULL;
 };
 
 class CImageReader : public node::ObjectWrap
@@ -93,10 +90,9 @@ private:
 	static void colorAt(const FunctionCallbackInfo<Value>& args);
 	static void imageWidth(const FunctionCallbackInfo<Value>& args);
 	static void imageHeight(const FunctionCallbackInfo<Value>& args);
+
 	static void afterReadImageWorkerCb(uv_work_t * req, int status);
 	static void readImageWorkerCb(uv_work_t * req);
-
-	static void release(const FunctionCallbackInfo<Value>& args);
 
 private:
 	static v8::Persistent<v8::Function> m_pConstructor;

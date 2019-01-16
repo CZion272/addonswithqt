@@ -41,7 +41,7 @@ namespace qtAddons
 			double dz = z1 - z2;
 
 			qreal rCom = qSqrt((dx * dx + dy * dy + dz * dz));
-			if ((int)rCom < 10000)
+			if ((int)rCom < 500000)
 			{
 				return true;
 			}
@@ -55,9 +55,9 @@ namespace qtAddons
 		{
 			isolate->ThrowException(Exception::TypeError(
 				String::NewFromUtf8(isolate, "²ÎÊý´íÎó")));
+			args.GetReturnValue().Set(false);
 			return;
 		}
-
 		v8::String::Utf8Value str(args[0]->ToString());
 		QString strColor = *str;
 
@@ -70,7 +70,6 @@ namespace qtAddons
 		{
 			lstColor.append(QColor(str));
 		}
-
 		args.GetReturnValue().Set(compareColorEx(QColor(strColor), lstColor));
 	}
 
