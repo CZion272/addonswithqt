@@ -1,6 +1,21 @@
 #include "office.h"
 #include "opc/opc.h"
-#include <QDebug>
+
+static inline std::string ws2s(const wstring& s)
+{
+	int
+		len;
+
+	std::string
+		result;
+
+	len = WideCharToMultiByte(CP_UTF8, 0, s.c_str(), (int)s.length() + 1, 0, 0, 0, 0);
+	result = std::string(len, '\0');
+	(void)WideCharToMultiByte(CP_UTF8, 0, s.c_str(), (int)s.length() + 1, &result[0],
+		len, 0, 0);
+	return result;
+}
+
 
 //pptµº≥ˆ‘§¿¿Õº∆¨
 static void extract(opcContainer *c, opcPart p, const char *path)
@@ -39,25 +54,26 @@ static void extract(opcContainer *c, opcPart p, const char *path)
 	}
 }
 
-void PPT2Image(QString strPPT, QString strSave)
+void PPT2Image(const char* chPPT, const char* chSave)
 {
+#ifdef WIN32
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+#endif
 	opcInitLibrary();
-	opcContainer *c = opcContainerOpen(_X(strPPT.toStdString().c_str()), OPC_OPEN_READ_ONLY, NULL, NULL);
-
-	const char * chSavePath = strSave.toStdString().c_str();
-
+	opcContainer *c = opcContainerOpen(_X(chPPT), OPC_OPEN_READ_ONLY, NULL, NULL);
 	if (NULL != c)
 	{
+		qDebug() << 123;
 		for (opcPart part = opcPartGetFirst(c); OPC_PART_INVALID != part; part = opcPartGetNext(c, part))
 		{
 			const xmlChar *type = opcPartGetType(c, part);
 			if (xmlStrcmp(type, _X("image/jpeg")) == 0)
 			{
-				extract(c, part, chSavePath);
+				extract(c, part, chSave);
 			}
 			else if (xmlStrcmp(type, _X("image/png")) == 0)
 			{
-				extract(c, part, chSavePath);
+				extract(c, part, chSave);
 			}
 			else
 			{
@@ -66,5 +82,8 @@ void PPT2Image(QString strPPT, QString strSave)
 		}
 		opcContainerClose(c, OPC_CLOSE_NOW);
 	}
+#ifdef WIN32
+	OPC_ASSERT(!_CrtDumpMemoryLeaks());
+#endif
 	opcFreeLibrary();
 }

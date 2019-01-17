@@ -518,10 +518,10 @@ bool CImageReader::readCdrPerviewFile()
 bool CImageReader::readPPT()
 {
 	bool b = false;
-	qDebug() << QFile(m_strImage).exists();
-	PPT2Image(m_strImage, "tempppt.png");
+	PPT2Image(m_strImage.toLocal8Bit(), "tempppt.png");
 	if (QFile("tempppt.png").exists())
 	{
+		qDebug() << 1;
 		m_strImage = "tempppt.png";
 		b = readImageFile();
 		QFile("tempppt.png").remove();
