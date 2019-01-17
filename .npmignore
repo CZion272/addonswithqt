@@ -1,0 +1,11 @@
+*.py
+*.h
+*.cpp
+*.cc
+*.gyp
+*.bat
+quazip
+libopc
+lib
+magick
+

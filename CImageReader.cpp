@@ -301,6 +301,10 @@ void CImageReader::readImage()
 	{
 		bReadSave = readVideo();
 	}
+	if (bReadSave)
+	{
+		m_strImageMgickError = "";
+	}
 }
 
 bool CImageReader::readImageFile()
