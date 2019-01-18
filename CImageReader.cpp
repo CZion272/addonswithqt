@@ -72,7 +72,6 @@ CImageReader::CImageReader(const char* image, const char* preview) :
 
 CImageReader::~CImageReader()
 {
-	delete m_pReqData;
 }
 
 void CImageReader::Init(Local<Object> exports)
@@ -383,7 +382,7 @@ bool CImageReader::readImageFile()
 			m_fRatio = 1.0;
 		}
 
-		thumbnails = ThumbnailImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
+		thumbnails = AdaptiveResizeImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
 
 		if (thumbnails == NULL)
 		{
