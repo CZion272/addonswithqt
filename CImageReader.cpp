@@ -382,7 +382,7 @@ bool CImageReader::readImageFile()
 			m_fRatio = 1.0;
 		}
 
-		thumbnails = AdaptiveResizeImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
+		thumbnails = ThumbnailImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
 
 		if (thumbnails == NULL)
 		{
