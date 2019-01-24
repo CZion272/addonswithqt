@@ -4,14 +4,8 @@
 #include <uv.h>
 //#include <Windows.h>
 #include <stdio.h>
-#include "quazip/quazipfile.h"
-#include "quazip/quazip.h"
-#include <QIODevice>
-#include <QImageReader>
 #include <node.h>
-#include <QFileInfo>
-#include <MagickCore/MagickCore.h>
-#include <direct.h>
+#include "ImageObjcet.h"
 #include <node_object_wrap.h>
 
 using namespace v8;
@@ -29,23 +23,6 @@ using v8::String;
 using v8::Value;
 using v8::HandleScope;
 
-enum FILETYPE
-{
-	TYPE_NORMAL,
-	TYPE_CDR,
-	TYPE_OFFICE
-};
-
-class CImageReader;
-
-struct ShareData
-{
-	uv_work_t request;
-	Isolate * isolate;
-	Persistent<Function> js_callback;
-	CImageReader* obj;
-};
-
 class CImageReader : public node::ObjectWrap
 {
 
@@ -54,23 +31,9 @@ public:
 	static void New(const FunctionCallbackInfo<Value>& args);
 
 	static void setFFMpeg(QString strPath);
-	void readImage();
 private:
 	explicit CImageReader(const char* strImage = "", const char* strPreview = "");
 	~CImageReader();
-
-	QList<QColor> getColorList();
-	int getWigth();
-	int getHeight();
-
-	bool compareColorEx(QColor color, int nDiff = 10000);
-
-	bool pingImageFile();
-	bool readImageFile();
-	bool readCdrPerviewFile();
-	bool readPPT();
-
-	bool readVideo();
 
 private:
 	//µ¼³öº¯Êý
@@ -99,26 +62,13 @@ private:
 	static void readImageWorkerCb(uv_work_t * req);
 private:
 	static v8::Persistent<v8::Function> m_pConstructor;
-
+	ImageObjcet *m_pImageObj;
 	QString m_strImage;
-	QImage m_imgImage;
 	QString m_strPreview;
-	QImage m_imgPreview;
-	QList<QColor> m_lstColor;
-	QString m_strMd5;
-	QString m_strMiddleFile;
-	QString m_strSufix;
-	QString m_strImageMgickError;
-	QString m_strVideo;
 
-	int m_nHeight;
-	int m_nWight;
-	int m_nScaleHeight;
-	int m_nScaleWight;
-	float m_fRatio;
-
-	int m_nColorCount;
-	ShareData * m_pReqData;
+	uv_work_t request;
+	Isolate * isolate;
+	Persistent<Function> js_callback;
 };
 
 #endif // QTADDONS_H

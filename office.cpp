@@ -63,7 +63,6 @@ void PPT2Image(const char* chPPT, const char* chSave)
 	opcContainer *c = opcContainerOpen(_X(chPPT), OPC_OPEN_READ_ONLY, NULL, NULL);
 	if (NULL != c)
 	{
-		qDebug() << 123;
 		for (opcPart part = opcPartGetFirst(c); OPC_PART_INVALID != part; part = opcPartGetNext(c, part))
 		{
 			const xmlChar *type = opcPartGetType(c, part);

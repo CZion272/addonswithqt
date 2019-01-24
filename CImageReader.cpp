@@ -1,52 +1,13 @@
 #include "CImageReader.h"
-#include <QDebug>
-#include "qmath.h"
-#include <QImageWriter>
-#include <QBuffer>
-#include <QTimer>
-#include <QCryptographicHash>
-#include <QTemporaryFile>
-#include <QThread>
-#include <QFile>
-#include <QProcess>
-#include "office.h"
 
 using namespace std;
 Persistent<Function> CImageReader::m_pConstructor;
-static QString g_strFFMpegPath;
-
-static double gR = 100;
-static double gAngle = 30;
-static double gh = gR * qCos((float)gAngle / 180 * M_PI);
-static double gr = gR * qSin((float)gAngle / 180 * M_PI);
-
-//直方图排序
-static int HistogramCompare(const void *x, const void *y)
-{
-	const PixelInfo
-		*color_1,
-		*color_2;
-
-	color_1 = (const PixelInfo *)x;
-	color_2 = (const PixelInfo *)y;
-	return((int)color_2->count - (int)color_1->count);
-}
-
-uv_sem_t g_pSemSave = NULL;
 
 CImageReader::CImageReader(const char* image, const char* preview) :
 	m_strImage(image),
 	m_strPreview(preview),
-	m_nHeight(0),
-	m_nWight(0),
-	m_nScaleWight(0),
-	m_nScaleHeight(0),
-	m_fRatio(0),
-	m_strMiddleFile(""),
-	m_nColorCount(0),
-	m_strImageMgickError("")
+	m_pImageObj(NULL)
 {
-	//PDF和AI文件必要加载ghostscprit库，查找并设置环境变量
 	if (getenv("MAGICK_GHOSTSCRIPT_PATH") == NULL)
 	{
 		wchar_t wcEnvPath[MAX_PATH] = { 0 };
@@ -67,23 +28,26 @@ CImageReader::CImageReader(const char* image, const char* preview) :
 		setenv("MAGICK_GHOSTSCRIPT_PATH", strEnvPath.toStdString().c_str(), 0);
 #endif 
 	}
-	m_strSufix = QFileInfo(m_strImage).suffix().toLower();
+	m_pImageObj = new ImageObjcet(image, preview);
 }
 
 CImageReader::~CImageReader()
 {
+	if (m_pImageObj != NULL)
+	{
+		delete m_pImageObj;
+		m_pImageObj = NULL;
+	}
 }
 
 void CImageReader::Init(Local<Object> exports)
 {
 	Isolate* isolate = exports->GetIsolate();
 
-	// 准备构造函数模版
 	Local<FunctionTemplate> tpl = FunctionTemplate::New(isolate, New);
 	tpl->SetClassName(String::NewFromUtf8(isolate, "CImageReader"));
 	tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
-	// 原型
 	NODE_SET_PROTOTYPE_METHOD(tpl, "setDefaultColorList", setDefaultColorList);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "setDefaultImageSize", setDefaultImageSize);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "setDefaultMD5", setDefaultMD5);
@@ -108,29 +72,32 @@ void CImageReader::Init(Local<Object> exports)
 
 void CImageReader::readImageWorkerCb(uv_work_t * req)
 {
-	ShareData * my_data = static_cast<ShareData *>(req->data);
-
-	my_data->obj->readImage();
+	CImageReader * obj = static_cast<CImageReader *>(req->data);
+	Isolate * isolate = obj->isolate;
+	obj->m_pImageObj->readImage();
 }
 
 void CImageReader::setFFMpeg(QString strPath)
 {
-	g_strFFMpegPath = strPath;
+	ImageObjcet::setFFMpeg(strPath);
 }
 
 void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
 {
-	ShareData * my_data = static_cast<ShareData *>(req->data);
+	CImageReader * obj = static_cast<CImageReader *>(req->data);
 	if (status == UV_ECANCELED)
 	{
 		return;
 	}
 
-	Isolate * isolate = my_data->isolate;
+	Isolate * isolate = obj->isolate;
 	HandleScope scope(isolate);
-	Local<Function> js_callback = Local<Function>::New(isolate, my_data->js_callback);
-	Local<Value> error = v8::Exception::TypeError(String::NewFromUtf8(isolate, my_data->obj->m_strImageMgickError.toStdString().c_str()));
-	if (!my_data->obj->m_strImageMgickError.isEmpty())
+	Local<Function> js_callback = Local<Function>::New(isolate, obj->js_callback);
+	Local<Value> error =
+		v8::Exception::TypeError(
+			String::NewFromUtf8(isolate,
+				obj->m_pImageObj->getLastError().toStdString().c_str()));
+	if (!obj->m_pImageObj->getLastError().isEmpty())
 	{
 		js_callback->Call(isolate->GetCurrentContext()->Global(), 1, &error);
 	}
@@ -159,399 +126,8 @@ void CImageReader::New(const FunctionCallbackInfo<Value>& args)
 	const char *chImage1 = *str1;
 
 	CImageReader *obj = new CImageReader(chImage, chImage1);
-
 	obj->Wrap(args.This());
 	args.GetReturnValue().Set(args.This());
-}
-
-QList<QColor> CImageReader::getColorList()
-{
-	return m_lstColor;
-}
-
-int CImageReader::getWigth()
-{
-	return m_nWight;
-}
-
-int CImageReader::getHeight()
-{
-	return m_nHeight;
-}
-
-bool CImageReader::compareColorEx(QColor color, int nDiff /*= 50000*/)
-{
-	int h = 0, s = 0, v = 0;
-	QColor hsvColor = color.toHsv();
-	hsvColor.getHsv(&h, &s, &v);
-	if (m_lstColor.count() == 0)
-	{
-		return false;
-	}
-	foreach(QColor colorCompare, m_lstColor)
-	{
-		int hc = 0, sc = 0, vc = 0;
-		hsvColor = colorCompare.toHsv();
-		hsvColor.getHsv(&hc, &sc, &vc);
-
-		double x1 = gr * v * s * qCos((float)h / 180 * M_PI);
-		double y1 = gr * v * s * qSin((float)h / 180 * M_PI);
-		double z1 = gh * (1 - v);
-
-		double x2 = gr * vc * sc * qCos((float)hc / 180 * M_PI);
-		double y2 = gr * vc * sc * qSin((float)hc / 180 * M_PI);
-		double z2 = gh * (1 - vc);
-
-		double dx = x1 - x2;
-		double dy = y1 - y2;
-		double dz = z1 - z2;
-
-		qreal rCom = qSqrt((dx * dx + dy * dy + dz * dz));
-		if ((int)rCom < nDiff)
-		{
-			return true;
-		}
-	}
-	return false;
-}
-
-bool CImageReader::pingImageFile()
-{
-	ExceptionInfo *exception;
-
-	exception = AcquireExceptionInfo();
-	ImageInfo *imageInfo;
-	imageInfo = CloneImageInfo(NULL);
-	strcpy(imageInfo->filename, m_strImage.toStdString().c_str());
-
-	Image *images = PingImage(imageInfo, exception);
-	if (images == NULL)
-	{
-		if (g_strFFMpegPath.isEmpty())
-		{
-			return false;
-		}
-		QProcess process;
-		QStringList lstArgs;
-		lstArgs.append("-i");
-		lstArgs.append(m_strImage);
-		lstArgs.append("-y");
-		lstArgs.append("tempVideo.png");
-		process.start(g_strFFMpegPath, lstArgs);
-		if (process.waitForFinished(-1))
-		{
-			if (QFile("tempVideo.png").exists())
-			{
-				strcpy(imageInfo->filename, "tempVideo.png");
-				images = PingImage(imageInfo, exception);
-			}
-			else
-			{
-				return false;
-			}
-		}
-		else
-		{
-			return false;
-		}
-	}
-	m_nHeight = images->magick_rows;
-	m_nWight = images->magick_columns;
-
-	images = DestroyImage(images);
-	imageInfo = DestroyImageInfo(imageInfo);
-	exception = DestroyExceptionInfo(exception);
-	return true;
-}
-
-void CImageReader::readImage()
-{
-	bool bReadSave = false;
-	FILETYPE type = TYPE_NORMAL;
-	if (m_strSufix == "cdr")
-	{
-		type = TYPE_CDR;
-	}
-	else if (
-		m_strSufix == "ppt"
-		|| m_strSufix == "pptx"
-		//|| file.suffix().toLower() == "doc"
-		//|| file.suffix().toLower() == "docx"
-		)
-	{
-		type = TYPE_OFFICE;
-	}
-	switch (type)
-	{
-	case TYPE_CDR:
-	{
-		bReadSave = readCdrPerviewFile();
-	}
-	case TYPE_OFFICE:
-	{
-		bReadSave = readPPT();
-	}
-	default:
-		bReadSave = readImageFile();
-		break;
-	}
-	//如果im无法读取，尝试使用ffmpeg读取
-	if (!bReadSave)
-	{
-		bReadSave = readVideo();
-	}
-	if (bReadSave)
-	{
-		m_strImageMgickError = "";
-	}
-}
-
-bool CImageReader::readImageFile()
-{
-	size_t number_formats;
-
-	ExceptionInfo *exception;
-	exception = AcquireExceptionInfo();
-
-	ImageInfo *imageInfo;
-	ImageInfo *thumbnailsInfo;
-
-	imageInfo = AcquireImageInfo();
-	thumbnailsInfo = CloneImageInfo(NULL);
-
-	Image *images;
-	Image *thumbnails;
-
-#ifdef DEBUG
-	strcpy(imageInfo->filename, "0.svg");
-	strcpy(thumbnailsInfo->filename, "0.png");
-#else
-	strcpy(imageInfo->filename, m_strVideo.isEmpty() ? m_strImage.toStdString().c_str() : m_strVideo.toStdString().c_str());
-	strcpy(thumbnailsInfo->filename, m_strPreview.toStdString().c_str());
-#endif // DEBUG
-	//if (m_strSufix == "psd")
-	{
-		imageInfo->number_scenes = 1;
-	}
-	images = ReadImage(imageInfo, exception);
-	bool bTemp = false;
-	QString tempFile;
-
-	if (images == NULL)
-	{
-		m_strImageMgickError = exception->reason;
-		return false;
-	}
-
-	thumbnails = NewImageList();
-
-	//if ((image = RemoveFirstImageFromList(&images)) != (Image *)NULL)
-	{
-		m_nHeight = images->magick_rows;
-		m_nWight = images->magick_columns;
-
-		if (m_nHeight == 0 || m_nWight == 0)
-		{
-			return false;
-		}
-
-		if (m_nHeight > m_nWight)
-		{
-			if (m_nScaleHeight != 0)
-			{
-				m_fRatio = (float)m_nScaleHeight / (float)m_nHeight;
-			}
-			else
-			{
-				m_fRatio = (float)m_nScaleWight / (float)m_nWight;
-			}
-		}
-		else
-		{
-			if (m_nScaleWight != 0)
-			{
-				m_fRatio = (float)m_nScaleWight / (float)m_nWight;
-			}
-			else
-			{
-				m_fRatio = (float)m_nScaleHeight / (float)m_nHeight;
-			}
-		}
-		if (m_fRatio == 0.00)
-		{
-			m_fRatio = 1.0;
-		}
-
-		thumbnails = ThumbnailImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
-
-		if (thumbnails == NULL)
-		{
-			m_strImageMgickError = exception->reason;
-			images = DestroyImageList(images);
-			thumbnails = DestroyImageList(thumbnails);
-			imageInfo = DestroyImageInfo(imageInfo);
-			thumbnailsInfo = DestroyImageInfo(thumbnailsInfo);
-			exception = DestroyExceptionInfo(exception);
-			return false;
-		}
-
-
-		if (!m_strMiddleFile.isEmpty())
-		{
-			if (//ppt和cdr均已保存过中间文件
-				m_strSufix != "ppt"
-				&& m_strSufix != "pptx"
-				&& m_strSufix != "cdr"
-				)
-			{
-				Image *image = NewImageList();
-				ImageInfo *midInfo = CloneImageInfo(imageInfo);
-				midInfo->quality = 10;
-
-				image = ThumbnailImage(images, m_nWight, m_nHeight, exception);
-
-				(void)strcpy(image->filename, m_strMiddleFile.toStdString().c_str());
-				(void)strcpy(midInfo->filename, m_strMiddleFile.toStdString().c_str());
-
-				WriteImage(midInfo, image, exception);
-
-				image = DestroyImage(image);
-				midInfo = DestroyImageInfo(midInfo);
-			}
-		}
-	}
-
-	size_t nColors = 0;
-	/*
-	  Write the image thumbnail.
-	*/
-	(void)strcpy(thumbnails->filename, m_strPreview.toStdString().c_str());
-	thumbnailsInfo->quality = 10;
-	bool b = WriteImage(thumbnailsInfo, thumbnails, exception);
-
-	//创建颜色直方图，排序
-	if (m_strSufix != "ai"
-		|| m_strSufix != "svg"
-		|| m_strSufix != "png")
-	{
-		QuantizeInfo *quantize = AcquireQuantizeInfo(thumbnailsInfo);
-		quantize->number_colors = 10;
-		CompressImageColormap(thumbnails, exception);
-		QuantizeImage(quantize, thumbnails, exception);
-	}
-	PixelInfo *p = GetImageHistogram(thumbnails, &nColors, exception);
-	PixelInfo *pCopy = ClonePixelInfo(p);
-	QMap<QString, int> mapColor;
-	QList<QColor> lstColor;
-	QList<int> lstColorNumber;
-
-	qsort((void *)p, (size_t)nColors, sizeof(*p), HistogramCompare);
-	PixelInfo pixel;
-	GetPixelInfo(thumbnails, &pixel);
-	m_nColorCount = nColors;
-	int nDiff = nColors < 10 ? 5000 : 20000;
-	for (int i = 0; i < (ssize_t)nColors; i++)
-	{
-		pixel = (*p);
-		char hex[MAX_PATH] = { 0 };
-		GetColorTuple(&pixel, MagickTrue, hex);
-		QString strHex(hex);
-		strHex = strHex.left(7);
-		if (!compareColorEx(QColor(strHex), nDiff))
-		{
-			//if (m_lstColor.indexOf(QColor(strHex)) == -1)
-			{
-				m_lstColor.append(QColor(strHex));
-			}
-		}
-		p++;
-	}
-
-	images = DestroyImageList(images);
-	thumbnails = DestroyImageList(thumbnails);
-	imageInfo = DestroyImageInfo(imageInfo);
-	thumbnailsInfo = DestroyImageInfo(thumbnailsInfo);
-	m_strImageMgickError = exception->reason;
-	exception = DestroyExceptionInfo(exception);
-	if (bTemp)
-	{
-		QFile::remove(tempFile);
-	}
-
-	return b;
-}
-
-bool CImageReader::readCdrPerviewFile()
-{
-	QuaZip zip(m_strImage);
-	zip.open(QuaZip::mdUnzip);
-	// first, we need some information about archive itself
-	QString comment = zip.getComment();
-	// and now we are going to access files inside it
-	QuaZipFile file(&zip);
-	QString strFileToSave = m_strMiddleFile.isEmpty() ? m_strPreview : m_strMiddleFile;
-	for (bool more = zip.goToFirstFile(); more; more = zip.goToNextFile())
-	{
-		//"/previews/thumbnail.png" cdr预览图片保存位置
-		if (zip.getCurrentFileName().contains("thumbnail"))
-		{
-			file.open(QIODevice::ReadOnly);
-
-			QByteArray imgByte = file.readAll();
-			QImage img;
-			img.loadFromData(imgByte);
-			m_nWight = img.width();
-			m_nHeight = img.height();
-			//img = img.scaled(img.width(), img.height(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-			img.save(strFileToSave);
-			// do something cool with file here
-			file.close(); // do not forget to close!
-			m_strImage = strFileToSave;
-			return readImageFile();
-		}
-	}
-	m_strImageMgickError = "invaild cdr file";
-	return false;
-}
-
-bool CImageReader::readPPT()
-{
-	bool b = false;
-	PPT2Image(m_strImage.toLocal8Bit(), "tempppt.png");
-	if (QFile("tempppt.png").exists())
-	{
-		qDebug() << 1;
-		m_strImage = "tempppt.png";
-		b = readImageFile();
-		QFile("tempppt.png").remove();
-	}
-	return b;
-}
-
-bool CImageReader::readVideo()
-{
-	if (g_strFFMpegPath.isEmpty())
-	{
-		return false;
-	}
-	QProcess process;
-	QStringList lstArgs;
-	lstArgs.append("-i");
-	lstArgs.append(m_strImage);
-	lstArgs.append("-y");
-	lstArgs.append("tempVideo.png");
-	process.start(g_strFFMpegPath, lstArgs);
-	if (process.waitForFinished(-1))
-	{
-		if (QFile("tempVideo.png").exists())
-		{
-			m_strVideo = "tempVideo.png";
-			bool b = readImageFile();
-			QFile().remove("tempVideo.png");
-			return b;
-		}
-	}
-	return false;
 }
 
 void CImageReader::setDefaultColorList(const FunctionCallbackInfo<Value>& args)
@@ -572,11 +148,12 @@ void CImageReader::setDefaultColorList(const FunctionCallbackInfo<Value>& args)
 	QString strColor(*str);
 
 	QStringList lstColor = strColor.split(*strSplit);
-
+	QList<QColor> clr;
 	foreach(QString strC, lstColor)
 	{
-		obj->m_lstColor.append(QColor(strC));
+		clr.append(QColor(strC));
 	}
+	obj->m_pImageObj->setDefaultColorList(clr);
 }
 
 void CImageReader::setDefaultImageSize(const FunctionCallbackInfo<Value>& args)
@@ -589,9 +166,16 @@ void CImageReader::setDefaultImageSize(const FunctionCallbackInfo<Value>& args)
 		return;
 	}
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-
-	obj->m_nWight = args[0]->IntegerValue();
-	obj->m_nHeight = args[1]->IntegerValue();
+	if (obj->m_pImageObj)
+	{
+		obj->m_pImageObj->setDefaultSize(args[0]->IntegerValue(), args[1]->IntegerValue());
+	}
+	else
+	{
+		isolate->ThrowException(v8::Exception::TypeError(
+			String::NewFromUtf8(isolate, "No Image Object")));
+		return;
+	}
 }
 
 void CImageReader::setDefaultMD5(const FunctionCallbackInfo<Value>& args)
@@ -606,8 +190,10 @@ void CImageReader::setDefaultMD5(const FunctionCallbackInfo<Value>& args)
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
 
 	v8::String::Utf8Value str(args[0]->ToString());
-
-	obj->m_strMd5 = *str;
+	if (obj->m_pImageObj)
+	{
+		obj->m_pImageObj->setDefalutMD5(*str);
+	}
 }
 
 void CImageReader::readFile(const FunctionCallbackInfo<Value>& args)
@@ -631,14 +217,11 @@ void CImageReader::readFile(const FunctionCallbackInfo<Value>& args)
 	}
 
 	HandleScope scope(isolate);
-	ShareData * pReqData = new ShareData;
-	pReqData->request.data = pReqData;
-	pReqData->isolate = isolate;
-	pReqData->js_callback.Reset(isolate, Local<Function>::Cast(args[0]));
-	pReqData->obj = obj;
-	obj->m_pReqData = pReqData;
-	//libuv线程池执行读取，异步回调
-	uv_queue_work(uv_default_loop(), &(pReqData->request), readImageWorkerCb, afterReadImageWorkerCb);
+	obj->request.data = obj;
+	obj->isolate = isolate;
+	obj->js_callback.Reset(isolate, Local<Function>::Cast(args[0]));
+
+	uv_queue_work(uv_default_loop(), &(obj->request), readImageWorkerCb, afterReadImageWorkerCb);
 
 	args.GetReturnValue().Set(true);
 }
@@ -655,7 +238,11 @@ void CImageReader::pingFileInfo(const FunctionCallbackInfo<Value>& args)
 		args.GetReturnValue().Set(false);
 		return;
 	}
-	bool b = obj->pingImageFile();
+	bool b = false;
+	if (obj->m_pImageObj)
+	{
+		b = obj->m_pImageObj->pingImageFile();
+	}
 	args.GetReturnValue().Set(b);
 }
 
@@ -663,7 +250,7 @@ void CImageReader::cancel(const FunctionCallbackInfo<Value>& args)
 {
 	Isolate* isolate = args.GetIsolate();
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-	uv_work_s* w = &obj->m_pReqData->request;
+	uv_work_s* w = &obj->request;
 	int n = uv_cancel((uv_req_s*)w);
 	if (n == 0)
 	{
@@ -684,8 +271,10 @@ void CImageReader::setPreviewSize(const FunctionCallbackInfo<Value>& args)
 		return;
 	}
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-	obj->m_nScaleWight = args[0]->IntegerValue();
-	obj->m_nScaleHeight = args[1]->IntegerValue();
+	if (obj->m_pImageObj)
+	{
+		obj->m_pImageObj->setScallSize(args[0]->IntegerValue(), args[1]->IntegerValue());
+	}
 }
 
 void CImageReader::setMiddleFile(const FunctionCallbackInfo<Value>& args)
@@ -701,7 +290,10 @@ void CImageReader::setMiddleFile(const FunctionCallbackInfo<Value>& args)
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
 
 	v8::String::Utf8Value str(args[0]->ToString());
-	obj->m_strMiddleFile = *str;
+	if (obj->m_pImageObj)
+	{
+		obj->m_pImageObj->setMiddleFile(*str);
+	}
 }
 
 void CImageReader::compareColor(const FunctionCallbackInfo<Value>& args)
@@ -724,7 +316,11 @@ void CImageReader::compareColor(const FunctionCallbackInfo<Value>& args)
 		return;
 	}
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-	bool bCompare = obj->compareColorEx(color);
+	bool bCompare = false;
+	if (obj->m_pImageObj)
+	{
+		bCompare = obj->m_pImageObj->compareColorEx(color);
+	}
 	args.GetReturnValue().Set(!bCompare);
 }
 
@@ -739,23 +335,26 @@ void CImageReader::MD5(const FunctionCallbackInfo<Value>& args)
 			String::NewFromUtf8(isolate, "File open failed")));
 		args.GetReturnValue().Set(FALSE);
 	}
-
-	QByteArray ba = QCryptographicHash::hash(file.readAll(), QCryptographicHash::Md5);
-
-	file.close();
-	QString md5 = ba.toHex();
-
-	obj->m_strMd5 = md5;
-	args.GetReturnValue().Set(String::NewFromUtf8(isolate, md5.toLatin1().constData()));
+	QString strMD5 = "";
+	if (obj->m_pImageObj)
+	{
+		strMD5 = obj->m_pImageObj->MD5();
+	}
+	args.GetReturnValue().Set(String::NewFromUtf8(isolate, strMD5.toLatin1().constData()));
 }
 
 void CImageReader::colorCount(const FunctionCallbackInfo<Value>& args)
 {
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-	args.GetReturnValue().Set(obj->m_nColorCount);
+	int nCount = 0;
+	if (obj->m_pImageObj)
+	{
+		nCount = obj->m_pImageObj->getColorList().count();
+	}
+	args.GetReturnValue().Set(nCount);
 }
 
-//static node.js使用
+//static node.js使锟斤拷
 void CImageReader::colorAt(const FunctionCallbackInfo<Value>& args)
 {
 	Isolate* isolate = args.GetIsolate();
@@ -769,8 +368,12 @@ void CImageReader::colorAt(const FunctionCallbackInfo<Value>& args)
 	int i = args[0]->NumberValue();
 
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+	QList<QColor> lstColor;
+	if (obj->m_pImageObj)
+	{
+		lstColor = obj->m_pImageObj->getColorList();
+	}
 
-	QList<QColor> lstColor = obj->getColorList();
 	if (i >= lstColor.count())
 	{
 		args.GetReturnValue().Set(String::NewFromUtf8(isolate, ""));
@@ -785,14 +388,22 @@ void CImageReader::imageWidth(const FunctionCallbackInfo<Value>& args)
 {
 	Isolate* isolate = args.GetIsolate();
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-
-	args.GetReturnValue().Set(obj->getWigth());
+	int nWigth = 0;
+	if (obj->m_pImageObj)
+	{
+		nWigth = obj->m_pImageObj->getWigth();
+	}
+	args.GetReturnValue().Set(nWigth);
 }
 
 void CImageReader::imageHeight(const FunctionCallbackInfo<Value>& args)
 {
 	Isolate* isolate = args.GetIsolate();
 	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-
-	args.GetReturnValue().Set(obj->getHeight());
+	int nHeight = 0;
+	if (obj->m_pImageObj)
+	{
+		nHeight = obj->m_pImageObj->getHeight();
+	}
+	args.GetReturnValue().Set(nHeight);
 }

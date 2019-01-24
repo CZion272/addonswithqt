@@ -50,8 +50,12 @@
     {
       "target_name": "<(module_name)",
       "sources": [
+			"ImageObjcet.cpp",
+			"ImageObjcet.h",
 			"CImageReader.cpp",
 			"CImageReader.h",
+			"video.h",
+			"video.cpp",
 			"qtAddons.cc"
 			],
 			"dependencies": [ "libOffice" ],
@@ -64,6 +68,7 @@
 			"include_dirs": [
 			"../quazip",
 		 "libopc/include",
+		 "ffmpeg/include",
 			"<(MAGICK_ROOT)/include",
 			"$(QTDIR)/include",
 			"$(QTDIR)/include/QtGui",
@@ -75,6 +80,14 @@
 			"libraries": [
 			"<(PRODUCT_DIR)/libOffice.lib",
 			"../quazip/release/quazip.lib",
+			"../ffmpeg/lib/avcodec.lib",
+			"../ffmpeg/lib/avdevice.lib",
+			"../ffmpeg/lib/avfilter.lib",
+			"../ffmpeg/lib/avformat.lib",
+			"../ffmpeg/lib/avutil.lib",
+			"../ffmpeg/lib/postproc.lib",
+			"../ffmpeg/lib/swresample.lib",
+			"../ffmpeg/lib/swscale.lib",
 			"../magick/lib/CORE_RL_bzlib_.lib",
 			"../magick/lib/CORE_RL_cairo_.lib",
 			"../magick/lib/CORE_RL_coders_.lib",
