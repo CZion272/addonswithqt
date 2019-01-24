@@ -29,8 +29,6 @@ class CImageReader : public node::ObjectWrap
 public:
 	static void Init(v8::Local<v8::Object> exports);
 	static void New(const FunctionCallbackInfo<Value>& args);
-
-	static void setFFMpeg(QString strPath);
 private:
 	explicit CImageReader(const char* strImage = "", const char* strPreview = "");
 	~CImageReader();
@@ -38,6 +36,7 @@ private:
 private:
 	//导出函数
 
+	static void Release(const FunctionCallbackInfo<Value>& args);
 	//设置默认值，当文件二次读取时直接设置
 	static void setDefaultColorList(const FunctionCallbackInfo<Value>& args);
 	static void setDefaultImageSize(const FunctionCallbackInfo<Value>& args);
