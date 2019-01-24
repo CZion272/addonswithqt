@@ -73,13 +73,11 @@ int writeFile(AVFrame* pFrame, int width, int height, int iIndex, const char* ch
 	AVCodec* pCodec = avcodec_find_encoder(pCodecCtx->codec_id);
 	if (!pCodec)
 	{
-		printf("Codec not found.");
 		return -1;
 	}
 
 	if (avcodec_open2(pCodecCtx, pCodec, NULL) < 0)
 	{
-		printf("Could not open codec.");
 		return -1;
 	}
 
@@ -96,17 +94,16 @@ int writeFile(AVFrame* pFrame, int width, int height, int iIndex, const char* ch
 	AVPacket pkt;
 	av_new_packet(&pkt, y_size * 3);
 
-
-	// 
 	int got_picture = 0;
-	int ret = avcodec_encode_video2(pCodecCtx, &pkt, pFrame, &got_picture);
+	int ret = avcodec_send_frame(pCodecCtx, pFrame);
+	ret = avcodec_receive_packet(pCodecCtx, &pkt);
+	//int ret = avcodec_encode_video2(pCodecCtx, &pkt, pFrame, &got_picture);
 	if (ret < 0)
 	{
-		printf("Encode Error.\n");
 		return -1;
 	}
-	printf("got_picture %d \n", got_picture);
-	if (got_picture == 1)
+
+	//if (got_picture == 1)
 	{
 		//pkt.stream_index = pAVStream->index;
 		ret = av_write_frame(pFormatCtx, &pkt);
@@ -189,7 +186,10 @@ bool makeVideoThumbnail(const char* chVideo, const char *chThumbnail)
 		avcodec_send_packet(pCodecCtx, &packet);
 		if (packet.stream_index == videoStream)
 		{
-			avcodec_receive_frame(pCodecCtx, pFrame);
+			if (avcodec_receive_frame(pCodecCtx, pFrame) < 0)
+			{
+				continue;
+			}
 			writeFile(pFrame, pCodecCtx->width, pCodecCtx->height, i++, chThumbnail);
 			break;
 		}

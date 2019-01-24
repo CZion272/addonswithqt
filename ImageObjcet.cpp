@@ -181,7 +181,7 @@ bool ImageObjcet::readImageFile()
 	strcpy(imageInfo->filename, "0.svg");
 	strcpy(thumbnailsInfo->filename, "0.png");
 #else
-	strcpy(imageInfo->filename, m_strVideo.isEmpty() ? m_strImage.toStdString().c_str() : m_strVideo.toStdString().c_str());
+	strcpy(imageInfo->filename, m_strImage.toStdString().c_str());
 	strcpy(thumbnailsInfo->filename, m_strPreview.toStdString().c_str());
 #endif // DEBUG
 	//if (m_strSufix == "psd")
@@ -384,6 +384,7 @@ bool ImageObjcet::readVideo()
 	{
 		m_strImage = "temp.jpg";
 		b = readImageFile();
+		QFile("temp.jpg").remove();
 	}
 	return b;
 }
