@@ -72,26 +72,11 @@ namespace qtAddons
 		}
 		args.GetReturnValue().Set(compareColorEx(QColor(strColor), lstColor));
 	}
-
-	void InitFFMpegEnv(const FunctionCallbackInfo<Value>& args)
-	{
-		Isolate* isolate = args.GetIsolate();
-		if (!args[0]->IsString())
-		{
-			isolate->ThrowException(Exception::TypeError(
-				String::NewFromUtf8(isolate, "Parameter error")));
-			args.GetReturnValue().Set(false);
-			return;
-		}
-		v8::String::Utf8Value str(args[0]->ToString());
-		CImageReader::setFFMpeg(*str);
-	}
-
+	
 	void InitAll(Local<Object> exports)
 	{
 		CImageReader::Init(exports);
 		NODE_SET_METHOD(exports, "hasColor", hasColor);
-		NODE_SET_METHOD(exports, "InitFFMpegEnv", InitFFMpegEnv);
 	}
 
 	NODE_MODULE(NODE_GYP_MODULE_NAME, InitAll)

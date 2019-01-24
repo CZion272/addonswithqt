@@ -57,6 +57,7 @@ void CImageReader::Init(Local<Object> exports)
 	NODE_SET_PROTOTYPE_METHOD(tpl, "readFile", readFile);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "pingFileInfo", pingFileInfo);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "cancel", cancel);
+	NODE_SET_PROTOTYPE_METHOD(tpl, "Release", Release);
 
 	NODE_SET_PROTOTYPE_METHOD(tpl, "compareColor", compareColor);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "colorCount", colorCount);
@@ -75,11 +76,6 @@ void CImageReader::readImageWorkerCb(uv_work_t * req)
 	CImageReader * obj = static_cast<CImageReader *>(req->data);
 	Isolate * isolate = obj->isolate;
 	obj->m_pImageObj->readImage();
-}
-
-void CImageReader::setFFMpeg(QString strPath)
-{
-	ImageObjcet::setFFMpeg(strPath);
 }
 
 void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
@@ -128,6 +124,17 @@ void CImageReader::New(const FunctionCallbackInfo<Value>& args)
 	CImageReader *obj = new CImageReader(chImage, chImage1);
 	obj->Wrap(args.This());
 	args.GetReturnValue().Set(args.This());
+}
+
+void CImageReader::Release(const FunctionCallbackInfo<Value>& args)
+{
+	Isolate* isolate = args.GetIsolate();
+
+	CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+	if (obj->m_pImageObj)
+	{
+		delete obj->m_pImageObj;
+	}
 }
 
 void CImageReader::setDefaultColorList(const FunctionCallbackInfo<Value>& args)
