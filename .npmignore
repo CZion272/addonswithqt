@@ -4,4 +4,12 @@
 *.cc
 *.gyp
 *.bat
-
+*.exe
+*.lib
+*.jpg
+*.csv
+build
+libopc
+magick
+vcruntimelibrary
+ffmpeg

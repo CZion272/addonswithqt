@@ -23,28 +23,10 @@
 			},
 		},
 		"defines": [
-			"QT_DEPRECATED_WARNINGS",
-			"QT_NO_DEBUG",
-			"QT_GUI_LIB",
-			"QT_CORE_LIB"
 			],
 	  "include_dirs": [
-		 "libopc/include",
-		 "$(QTDIR)/include",
-		 "$(QTDIR)/include/QtGui",
-		 "$(QTDIR)/include/QtANGLE",
-		 "$(QTDIR)/include/QtCore"
 		 ],
 	  "link_settings": {
-		 "libraries": [
-		 "../libopc/lib/mce.lib",
-		 "../libopc/lib/opc.lib",
-		 "../libopc/lib/plib.lib",
-		 "../libopc/lib/xml.lib",
-		 "../libopc/lib/zlib.lib",
-		 "$(QTDIR)/lib/Qt5Gui.lib",		 
-		 "$(QTDIR)/lib/Qt5Core.lib"
-		 ]
 		 }
 	},  
     {
