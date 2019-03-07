@@ -349,6 +349,7 @@ void CImageReader::MD5(const FunctionCallbackInfo<Value>& args)
     {
         strMD5 = obj->m_pImageObj->MD5();
     }
+    file.close();
     args.GetReturnValue().Set(String::NewFromUtf8(isolate, strMD5.toLatin1().constData()));
 }
 
