@@ -134,7 +134,9 @@ void CImageReader::Release(const FunctionCallbackInfo<Value>& args)
     if (obj->m_pImageObj)
     {
         delete obj->m_pImageObj;
+        obj->m_pImageObj = NULL;
     }
+    args.This().Clear();
 }
 
 void CImageReader::setDefaultColorList(const FunctionCallbackInfo<Value>& args)

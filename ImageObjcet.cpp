@@ -310,11 +310,11 @@ bool ImageObjcet::readImageFile()
         p++;
     }
 
+    m_strImageMgickError = exception->reason;
     images = DestroyImageList(images);
     thumbnails = DestroyImageList(thumbnails);
     imageInfo = DestroyImageInfo(imageInfo);
     thumbnailsInfo = DestroyImageInfo(thumbnailsInfo);
-    m_strImageMgickError = exception->reason;
     exception = DestroyExceptionInfo(exception);
     if (bTemp)
     {
