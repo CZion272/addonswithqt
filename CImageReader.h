@@ -32,7 +32,6 @@ public:
 private:
     explicit CImageReader(const char* strImage = "", const char* strPreview = "");
     ~CImageReader();
-
 private:
     //导出函数
 
@@ -47,8 +46,6 @@ private:
     static void setMiddleFile(const FunctionCallbackInfo<Value>& args);//CDR AI PPT等无法直接预览的格式需要
     static void readFile(const FunctionCallbackInfo<Value>& args);
     static void pingFileInfo(const FunctionCallbackInfo<Value>& args);
-    static void cancel(const FunctionCallbackInfo<Value>& args);
-
     //获取文件属性
     static void compareColor(const FunctionCallbackInfo<Value>& args);
     static void MD5(const FunctionCallbackInfo<Value>& args);
@@ -56,18 +53,11 @@ private:
     static void colorAt(const FunctionCallbackInfo<Value>& args);
     static void imageWidth(const FunctionCallbackInfo<Value>& args);
     static void imageHeight(const FunctionCallbackInfo<Value>& args);
-
-    static void afterReadImageWorkerCb(uv_work_t * req, int status);
-    static void readImageWorkerCb(uv_work_t * req);
 private:
     static v8::Persistent<v8::Function> m_pConstructor;
     ImageObjcet *m_pImageObj;
     QString m_strImage;
     QString m_strPreview;
-
-    uv_work_t request;
-    Isolate * isolate;
-    Persistent<Function> js_callback;
 };
 
 #endif // QTADDONS_H

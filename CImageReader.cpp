@@ -1,4 +1,5 @@
 #include "CImageReader.h"
+#include <QDebug>
 
 using namespace std;
 Persistent<Function> CImageReader::m_pConstructor;
@@ -56,7 +57,6 @@ void CImageReader::Init(Local<Object> exports)
     NODE_SET_PROTOTYPE_METHOD(tpl, "setPreviewSize", setPreviewSize);
     NODE_SET_PROTOTYPE_METHOD(tpl, "readFile", readFile);
     NODE_SET_PROTOTYPE_METHOD(tpl, "pingFileInfo", pingFileInfo);
-    NODE_SET_PROTOTYPE_METHOD(tpl, "cancel", cancel);
     NODE_SET_PROTOTYPE_METHOD(tpl, "Release", Release);
 
     NODE_SET_PROTOTYPE_METHOD(tpl, "compareColor", compareColor);
@@ -69,38 +69,6 @@ void CImageReader::Init(Local<Object> exports)
     m_pConstructor.Reset(isolate, tpl->GetFunction());
     exports->Set(String::NewFromUtf8(isolate, "CImageReader"),
         tpl->GetFunction());
-}
-
-void CImageReader::readImageWorkerCb(uv_work_t * req)
-{
-    CImageReader * obj = static_cast<CImageReader *>(req->data);
-    Isolate * isolate = obj->isolate;
-    obj->m_pImageObj->readImage();
-}
-
-void CImageReader::afterReadImageWorkerCb(uv_work_t * req, int status)
-{
-    CImageReader * obj = static_cast<CImageReader *>(req->data);
-    if (status == UV_ECANCELED)
-    {
-        return;
-    }
-
-    Isolate * isolate = obj->isolate;
-    HandleScope scope(isolate);
-    Local<Function> js_callback = Local<Function>::New(isolate, obj->js_callback);
-    Local<Value> error =
-        v8::Exception::TypeError(
-            String::NewFromUtf8(isolate,
-                obj->m_pImageObj->getLastError().toStdString().c_str()));
-    if (!obj->m_pImageObj->getLastError().isEmpty())
-    {
-        js_callback->Call(isolate->GetCurrentContext()->Global(), 1, &error);
-    }
-    else
-    {
-        js_callback->Call(isolate->GetCurrentContext()->Global(), 0, 0);
-    }
 }
 
 void CImageReader::New(const FunctionCallbackInfo<Value>& args)
@@ -116,12 +84,11 @@ void CImageReader::New(const FunctionCallbackInfo<Value>& args)
         args.GetReturnValue().Set(FALSE);
         return;
     }
-    v8::String::Utf8Value str(args[0]->ToString());
-    const char *chImage = *str;
-    v8::String::Utf8Value str1(args[1]->ToString());
-    const char *chImage1 = *str1;
 
-    CImageReader *obj = new CImageReader(chImage, chImage1);
+    v8::String::Utf8Value str(args[0]->ToString());
+    v8::String::Utf8Value str1(args[1]->ToString());
+
+    CImageReader *obj = new CImageReader(*str, *str1);
     obj->Wrap(args.This());
     args.GetReturnValue().Set(args.This());
 }
@@ -224,15 +191,26 @@ void CImageReader::readFile(const FunctionCallbackInfo<Value>& args)
         args.GetReturnValue().Set(false);
         return;
     }
+    obj->m_pImageObj->readImage();
 
-    HandleScope scope(isolate);
-    obj->request.data = obj;
-    obj->isolate = isolate;
-    obj->js_callback.Reset(isolate, Local<Function>::Cast(args[0]));
+    Local<Function> js_callback = Local<Function>::Cast(args[0]);
+    
+    Local<Value> error =
+        v8::Exception::TypeError(
+            String::NewFromUtf8(isolate,
+                obj->m_pImageObj->getLastError().toStdString().c_str()));
+    if (!obj->m_pImageObj->getLastError().isEmpty())
+    {
+        js_callback->Call(isolate->GetCurrentContext()->Global(), 1, &error);
 
-    uv_queue_work(uv_default_loop(), &(obj->request), readImageWorkerCb, afterReadImageWorkerCb);
+        args.GetReturnValue().Set(false);
+    }
+    else
+    {
+        js_callback->Call(isolate->GetCurrentContext()->Global(), 0, 0);
 
-    args.GetReturnValue().Set(true);
+        args.GetReturnValue().Set(true);
+    }
 }
 
 void CImageReader::pingFileInfo(const FunctionCallbackInfo<Value>& args)
@@ -253,20 +231,6 @@ void CImageReader::pingFileInfo(const FunctionCallbackInfo<Value>& args)
         b = obj->m_pImageObj->pingImageFile();
     }
     args.GetReturnValue().Set(b);
-}
-
-void CImageReader::cancel(const FunctionCallbackInfo<Value>& args)
-{
-    Isolate* isolate = args.GetIsolate();
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-    uv_work_s* w = &obj->request;
-    int n = uv_cancel((uv_req_s*)w);
-    if (n == 0)
-    {
-        args.GetReturnValue().Set(true);
-        return;
-    }
-    args.GetReturnValue().Set(false);
 }
 
 void CImageReader::setPreviewSize(const FunctionCallbackInfo<Value>& args)
