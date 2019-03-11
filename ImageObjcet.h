@@ -42,6 +42,8 @@ public:
     bool compareColorEx(QColor color, int nDiff = 10000);
 
     QString getLastError();
+
+    void releaseIM();
 private:
     QString m_strImage;
     QImage m_imgImage;
@@ -61,4 +63,10 @@ private:
     float m_fRatio;
 
     int m_nColorCount;
+
+    Image *m_pIMImages;
+    Image *m_pIMThumbnails;
+    ImageInfo *m_pIMImageInfo;
+    ImageInfo *m_pIMThumbnailsInfo;
+    ExceptionInfo *m_pIMException;
 };

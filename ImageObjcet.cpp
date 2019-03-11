@@ -117,26 +117,26 @@ void ImageObjcet::readImage()
 {
     bool bReadSave = false;
     FILETYPE type = TYPE_NORMAL;
-    if (m_strSufix == "cdr")
+    if (m_strSufix.contains("cdr"))
     {
         type = TYPE_CDR;
     }
-    else if (
-        m_strSufix == "ppt"
-        || m_strSufix == "pptx"
-        )
+    else if (m_strSufix.contains("ppt"))
     {
         type = TYPE_OFFICE;
     }
+
     switch (type)
     {
     case TYPE_CDR:
     {
         bReadSave = readCdrPerviewFile();
+        break;
     }
     case TYPE_OFFICE:
     {
         bReadSave = readPPT();
+        break;
     }
     default:
         bReadSave = readImageFile();
@@ -155,47 +155,37 @@ void ImageObjcet::readImage()
 
 bool ImageObjcet::readImageFile()
 {
-    size_t number_formats;
+    m_pIMException = AcquireExceptionInfo();
 
-    ExceptionInfo *exception;
-    exception = AcquireExceptionInfo();
-
-    ImageInfo *imageInfo;
-    ImageInfo *thumbnailsInfo;
-
-    imageInfo = AcquireImageInfo();
-    thumbnailsInfo = CloneImageInfo(NULL);
-
-    Image *images;
-    Image *thumbnails;
+    m_pIMImageInfo = CloneImageInfo(NULL);
+    m_pIMThumbnailsInfo = CloneImageInfo(NULL);
 
 #ifdef DEBUG
-    strcpy(imageInfo->filename, "0.svg");
-    strcpy(thumbnailsInfo->filename, "0.png");
+    strcpy(m_pIMImageInfo->filename, "0.svg");
+    strcpy(m_pIMThumbnailsInfo->filename, "0.png");
 #else
-    strcpy(imageInfo->filename, m_strImage.toStdString().c_str());
-    strcpy(thumbnailsInfo->filename, m_strPreview.toStdString().c_str());
+    strcpy(m_pIMImageInfo->filename, m_strImage.toStdString().c_str());
+    strcpy(m_pIMThumbnailsInfo->filename, m_strPreview.toStdString().c_str());
 #endif // DEBUG
     //if (m_strSufix == "psd")
     {
-        imageInfo->number_scenes = 1;
+        m_pIMImageInfo->number_scenes = 1;
     }
-    images = ReadImage(imageInfo, exception);
+
+    m_pIMImages = ReadImage(m_pIMImageInfo, m_pIMException);
     bool bTemp = false;
     QString tempFile;
 
-    if (images == NULL)
+    if (m_pIMImages == NULL)
     {
-        m_strImageMgickError = exception->reason;
+        m_strImageMgickError = m_pIMException->reason;
+        releaseIM();
         return false;
     }
 
-    thumbnails = NewImageList();
-
-    //if ((image = RemoveFirstImageFromList(&images)) != (Image *)NULL)
     {
-        m_nHeight = images->magick_rows;
-        m_nWight = images->magick_columns;
+        m_nHeight = m_pIMImages->magick_rows;
+        m_nWight = m_pIMImages->magick_columns;
 
         if (m_nHeight == 0 || m_nWight == 0)
         {
@@ -229,18 +219,13 @@ bool ImageObjcet::readImageFile()
             m_fRatio = 1.0;
         }
 
-        thumbnails = ThumbnailImage(images, m_nWight * m_fRatio, m_nHeight * m_fRatio, exception);
-        if (thumbnails == NULL)
+        m_pIMThumbnails = AdaptiveResizeImage(m_pIMImages, m_nWight * m_fRatio, m_nHeight * m_fRatio, m_pIMException);
+        if (m_pIMThumbnails == NULL)
         {
-            m_strImageMgickError = exception->reason;
-            images = DestroyImageList(images);
-            thumbnails = DestroyImageList(thumbnails);
-            imageInfo = DestroyImageInfo(imageInfo);
-            thumbnailsInfo = DestroyImageInfo(thumbnailsInfo);
-            exception = DestroyExceptionInfo(exception);
+            m_strImageMgickError = m_pIMException->reason;
+            releaseIM();
             return false;
         }
-
 
         if (!m_strMiddleFile.isEmpty())
         {
@@ -248,16 +233,15 @@ bool ImageObjcet::readImageFile()
                 m_strSufix != "cdr"
                 )
             {
-                Image *image = NewImageList();
-                ImageInfo *midInfo = CloneImageInfo(imageInfo);
+                Image *image;
+                ImageInfo *midInfo = CloneImageInfo(m_pIMImageInfo);
                 midInfo->quality = 10;
 
-                image = ThumbnailImage(images, m_nWight, m_nHeight, exception);
-
+                image = AdaptiveResizeImage(m_pIMImages, m_nWight, m_nHeight, m_pIMException);
                 (void)strcpy(image->filename, m_strMiddleFile.toStdString().c_str());
                 (void)strcpy(midInfo->filename, m_strMiddleFile.toStdString().c_str());
 
-                WriteImage(midInfo, image, exception);
+                WriteImage(midInfo, image, m_pIMException);
 
                 image = DestroyImage(image);
                 midInfo = DestroyImageInfo(midInfo);
@@ -269,28 +253,29 @@ bool ImageObjcet::readImageFile()
     /*
       Write the image thumbnail.
     */
-    (void)strcpy(thumbnails->filename, m_strPreview.toStdString().c_str());
-    thumbnailsInfo->quality = 10;
-    bool b = WriteImage(thumbnailsInfo, thumbnails, exception);
+    (void)strcpy(m_pIMThumbnails->filename, m_strPreview.toStdString().c_str());
+    m_pIMThumbnailsInfo->quality = 10;
+    bool b = WriteImage(m_pIMThumbnailsInfo, m_pIMThumbnails, m_pIMException);
+
+    Image *imgForColor = AdaptiveResizeImage(m_pIMThumbnails, m_pIMThumbnails->magick_columns * 0.1, m_pIMThumbnails->rows * 0.1, m_pIMException);
 
     if (m_strSufix != "ai"
         || m_strSufix != "svg"
         || m_strSufix != "png")
     {
-        QuantizeInfo *quantize = AcquireQuantizeInfo(thumbnailsInfo);
+        QuantizeInfo *quantize = AcquireQuantizeInfo(m_pIMThumbnailsInfo);
         quantize->number_colors = 10;
-        CompressImageColormap(thumbnails, exception);
-        QuantizeImage(quantize, thumbnails, exception);
+        CompressImageColormap(imgForColor, m_pIMException);
+        QuantizeImage(quantize, imgForColor, m_pIMException);
     }
-    PixelInfo *p = GetImageHistogram(thumbnails, &nColors, exception);
-    PixelInfo *pCopy = ClonePixelInfo(p);
+    PixelInfo *p = GetImageHistogram(imgForColor, &nColors, m_pIMException);
     QMap<QString, int> mapColor;
     QList<QColor> lstColor;
     QList<int> lstColorNumber;
 
     qsort((void *)p, (size_t)nColors, sizeof(*p), HistogramCompare);
     PixelInfo pixel;
-    GetPixelInfo(thumbnails, &pixel);
+    GetPixelInfo(imgForColor, &pixel);
     m_nColorCount = nColors;
     int nDiff = nColors < 10 ? 5000 : 20000;
     for (int i = 0; i < (ssize_t)nColors; i++)
@@ -309,17 +294,14 @@ bool ImageObjcet::readImageFile()
         }
         p++;
     }
-
-    m_strImageMgickError = exception->reason;
-    images = DestroyImageList(images);
-    thumbnails = DestroyImageList(thumbnails);
-    imageInfo = DestroyImageInfo(imageInfo);
-    thumbnailsInfo = DestroyImageInfo(thumbnailsInfo);
-    exception = DestroyExceptionInfo(exception);
+    imgForColor = DestroyImage(imgForColor);
+    m_strImageMgickError = m_pIMException->reason;
+    releaseIM();
     if (bTemp)
     {
         QFile::remove(tempFile);
     }
+
     return b;
 }
 
@@ -348,6 +330,7 @@ bool ImageObjcet::readCdrPerviewFile()
             // do something cool with file here
             file.close(); // do not forget to close!
             m_strImage = strFileToSave;
+            zip.close();
             return readImageFile();
         }
     }
@@ -445,4 +428,14 @@ bool ImageObjcet::compareColorEx(QColor color, int nDiff /*= 10000*/)
 QString ImageObjcet::getLastError()
 {
     return m_strImageMgickError;
+}
+
+void ImageObjcet::releaseIM()
+{
+    m_pIMThumbnails = DestroyImage(m_pIMThumbnails);
+    m_pIMImages = DestroyImage(m_pIMImages);
+    m_pIMImageInfo = DestroyImageInfo(m_pIMImageInfo);
+    m_pIMThumbnailsInfo = DestroyImageInfo(m_pIMThumbnailsInfo);
+    m_pIMException = DestroyExceptionInfo(m_pIMException);
+    MagickCoreTerminus();
 }
