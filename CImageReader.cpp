@@ -9,7 +9,7 @@ CImageReader::CImageReader(const char* image, const char* preview) :
     m_strPreview(preview),
     m_pImageObj(NULL)
 {
-    if (getenv("MAGICK_GHOSTSCRIPT_PATH") == NULL)
+    //if (getenv("MAGICK_GHOSTSCRIPT_PATH") == NULL)
     {
         wchar_t wcEnvPath[MAX_PATH] = { 0 };
         GetModuleFileNameW(NULL, wcEnvPath, MAX_PATH);
