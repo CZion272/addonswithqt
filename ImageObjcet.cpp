@@ -153,8 +153,6 @@ void ImageObjcet::readImage()
     }
 }
 
-QTime t(0,0,0);
-
 bool ImageObjcet::readImageFile()
 {
     m_pIMException = AcquireExceptionInfo();
@@ -174,9 +172,7 @@ bool ImageObjcet::readImageFile()
     {
         m_pIMImageInfo->number_scenes = 1;
     }
-    t.start();
     m_pIMImages = ReadImage(m_pIMImageInfo, m_pIMException);
-    qDebug() << t.elapsed();
     bool bTemp = false;
     QString tempFile;
 
@@ -223,7 +219,6 @@ bool ImageObjcet::readImageFile()
             m_fRatio = 1.0;
         }
 
-        qDebug() << m_pIMImages->compose << m_pIMImages->compression;
         if (m_pIMImages->compression == RLECompression)
         {
             m_pIMThumbnails = ThumbnailImage(m_pIMImages, m_nWight * m_fRatio, m_nHeight * m_fRatio, m_pIMException);
@@ -232,7 +227,6 @@ bool ImageObjcet::readImageFile()
         {
             m_pIMThumbnails = SampleImage(m_pIMImages, m_nWight * m_fRatio, m_nHeight * m_fRatio, m_pIMException);
         }
-        qDebug() << t.elapsed();
         if (m_pIMThumbnails == NULL)
         {
             m_strImageMgickError = m_pIMException->reason;
@@ -258,12 +252,10 @@ bool ImageObjcet::readImageFile()
                 {
                     image = SampleImage(m_pIMImages, m_nWight, m_nHeight, m_pIMException);
                 }
-                qDebug() << t.elapsed();
                 (void)strcpy(image->filename, m_strMiddleFile.toStdString().c_str());
                 (void)strcpy(midInfo->filename, m_strMiddleFile.toStdString().c_str());
 
                 WriteImage(midInfo, image, m_pIMException);
-                qDebug() << t.elapsed();
 
                 image = DestroyImage(image);
                 midInfo = DestroyImageInfo(midInfo);
@@ -278,7 +270,6 @@ bool ImageObjcet::readImageFile()
     (void)strcpy(m_pIMThumbnails->filename, m_strPreview.toStdString().c_str());
     m_pIMThumbnailsInfo->quality = 10;
     bool b = WriteImage(m_pIMThumbnailsInfo, m_pIMThumbnails, m_pIMException);
-    qDebug() << t.elapsed();
     Image *imgForColor = SampleImage(m_pIMThumbnails, m_pIMThumbnails->magick_columns * 0.1, m_pIMThumbnails->rows * 0.1, m_pIMException);
 
     if (m_strSufix != "ai"
@@ -323,7 +314,6 @@ bool ImageObjcet::readImageFile()
     {
         QFile::remove(tempFile);
     }
-    qDebug() << t.elapsed();
     return b;
 }
 
