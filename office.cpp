@@ -19,6 +19,11 @@ bool PPT2Image(const char* chPPT, const char* chSave)
     String^ strFile = System::Runtime::InteropServices::Marshal::PtrToStringAnsi((IntPtr)(char*)chPPT);
     String^ strSave = System::Runtime::InteropServices::Marshal::PtrToStringAnsi((IntPtr)(char*)chSave);
     Presentation ^ppt = pptApp->Presentations->Open(strFile, MsoTriState::msoFalse, MsoTriState::msoFalse, MsoTriState::msoFalse);
+    if (!ppt)
+    {
+        pptApp->Quit();
+        return false;
+    }
     Slide ^silde = ppt->Slides[1];
     if (!silde)
     {

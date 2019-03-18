@@ -1,5 +1,4 @@
 #pragma once
-
 #include <MagickCore/MagickCore.h>
 #include "quazip/quazipfile.h"
 #include "quazip/quazip.h"
@@ -14,6 +13,17 @@ enum FILETYPE
     TYPE_CDR,
     TYPE_OFFICE
 };
+
+static int HistogramCompare(const void *x, const void *y)
+{
+    const PixelInfo
+        *color_1,
+        *color_2;
+
+    color_1 = (const PixelInfo *)x;
+    color_2 = (const PixelInfo *)y;
+    return((int)color_2->count - (int)color_1->count);
+}
 
 class ImageObjcet
 {
@@ -39,6 +49,7 @@ public:
     int getWigth();
     int getHeight();
     void setDefaultSize(int nWigth, int nHeight);
+
     bool compareColorEx(QColor color, int nDiff = 10000);
 
     QString getLastError();

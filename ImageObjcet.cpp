@@ -11,23 +11,38 @@
 #include <QProcess>
 #include "office.h"
 #include "video.h"
+#include <Dbghelp.h>
+#pragma comment(lib, "Dbghelp.lib")
+
+LONG WINAPI lpUnhandledExceptionFilter(struct _EXCEPTION_POINTERS *ExceptionInfo)
+{
+    HANDLE hFile = CreateFile("Error.dmp", GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+    if (hFile == INVALID_HANDLE_VALUE)
+        return EXCEPTION_EXECUTE_HANDLER;
+
+    MINIDUMP_EXCEPTION_INFORMATION mdei;
+    mdei.ThreadId = GetCurrentThreadId();
+    mdei.ExceptionPointers = ExceptionInfo;
+    mdei.ClientPointers = NULL;
+    MINIDUMP_CALLBACK_INFORMATION mci;
+    mci.CallbackRoutine = NULL;
+    mci.CallbackParam = 0;
+
+    MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, MiniDumpNormal, &mdei, NULL, &mci);
+
+    CloseHandle(hFile);
+
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 
 
 static double gR = 100;
 static double gAngle = 30;
 static double gh = gR * qCos((float)gAngle / 180 * M_PI);
 static double gr = gR * qSin((float)gAngle / 180 * M_PI);
-
-static int HistogramCompare(const void *x, const void *y)
-{
-    const PixelInfo
-        *color_1,
-        *color_2;
-
-    color_1 = (const PixelInfo *)x;
-    color_2 = (const PixelInfo *)y;
-    return((int)color_2->count - (int)color_1->count);
-}
 
 ImageObjcet::ImageObjcet(const char* image, const char* preview) :
     m_strImage(image),
@@ -51,17 +66,23 @@ ImageObjcet::~ImageObjcet()
 
 QString ImageObjcet::MD5()
 {
-    QFile file(m_strImage);
-    if (file.open(QIODevice::ReadOnly))
+    __try
     {
-        QByteArray ba = QCryptographicHash::hash(file.readAll(), QCryptographicHash::Md5);
+        QFile file(m_strImage);
+        if (file.open(QIODevice::ReadOnly))
+        {
+            QByteArray ba = QCryptographicHash::hash(file.readAll(), QCryptographicHash::Md5);
 
-        file.close();
-        QString md5 = ba.toHex();
-        m_strMd5 = md5;
+            file.close();
+            QString md5 = ba.toHex();
+            m_strMd5 = md5;
+        }
+        return m_strMd5;
     }
-
-    return m_strMd5;
+    __except (lpUnhandledExceptionFilter(GetExceptionInformation()))
+    {
+        return "";
+    }
 }
 
 void ImageObjcet::setDefalutMD5(QString strMD5)
@@ -82,74 +103,88 @@ void ImageObjcet::setMiddleFile(QString strPath)
 
 bool ImageObjcet::pingImageFile()
 {
-    ExceptionInfo *exception;
-
-    exception = AcquireExceptionInfo();
-    ImageInfo *imageInfo;
-    imageInfo = CloneImageInfo(NULL);
-    strcpy(imageInfo->filename, m_strImage.toStdString().c_str());
-    imageInfo->number_scenes = 1;
-    Image *images = PingImage(imageInfo, exception);
-    if (images == NULL)
+    __try
     {
-        QSize size = getVideoResolution(m_strImage.toLocal8Bit().constData());
-        if (size.isEmpty())
+        ExceptionInfo *exception;
+
+        exception = AcquireExceptionInfo();
+        ImageInfo *imageInfo;
+        imageInfo = CloneImageInfo(NULL);
+        strcpy(imageInfo->filename, m_strImage.toStdString().c_str());
+        imageInfo->number_scenes = 1;
+        Image *images = PingImage(imageInfo, exception);
+        if (images == NULL)
         {
-            return false;
+            QSize size = getVideoResolution(m_strImage.toLocal8Bit().constData());
+            if (size.isEmpty())
+            {
+                return false;
+            }
+
+            m_nHeight = size.height();
+            m_nWight = size.width();
+        }
+        else
+        {
+            m_nHeight = images->magick_rows;
+            m_nWight = images->magick_columns;
+            images = DestroyImage(images);
         }
 
-        m_nHeight = size.height();
-        m_nWight = size.width();
+        imageInfo = DestroyImageInfo(imageInfo);
+        exception = DestroyExceptionInfo(exception);
+        return true;
     }
-    else
+    __except (lpUnhandledExceptionFilter(GetExceptionInformation()))
     {
-        m_nHeight = images->magick_rows;
-        m_nWight = images->magick_columns;
-        images = DestroyImage(images);
+        return false;
     }
-
-    imageInfo = DestroyImageInfo(imageInfo);
-    exception = DestroyExceptionInfo(exception);
-    return true;
 }
 
 void ImageObjcet::readImage()
 {
-    bool bReadSave = false;
-    FILETYPE type = TYPE_NORMAL;
-    if (m_strSufix.contains("cdr"))
+    __try
     {
-        type = TYPE_CDR;
-    }
-    else if (m_strSufix.contains("ppt"))
-    {
-        type = TYPE_OFFICE;
-    }
+        bool bReadSave = false;
+        FILETYPE type = TYPE_NORMAL;
+        if (m_strSufix.contains("cdr"))
+        {
+            type = TYPE_CDR;
+        }
+        else if (m_strSufix.contains("ppt"))
+        {
+            type = TYPE_OFFICE;
+        }
 
-    switch (type)
-    {
-    case TYPE_CDR:
-    {
-        bReadSave = readCdrPerviewFile();
-        break;
-    }
-    case TYPE_OFFICE:
-    {
-        bReadSave = readPPT();
-        break;
-    }
-    default:
-        bReadSave = readImageFile();
-        break;
-    }
+        switch (type)
+        {
+        case TYPE_CDR:
+        {
+            bReadSave = readCdrPerviewFile();
+            break;
+        }
+        case TYPE_OFFICE:
+        {
+            bReadSave = readPPT();
+            break;
+        }
+        default:
+            bReadSave = readImageFile();
+            break;
+        }
 
-    if (!bReadSave)
-    {
-        bReadSave = readVideo();
+        if (!bReadSave)
+        {
+            bReadSave = readVideo();
+        }
+        if (bReadSave)
+        {
+            m_strImageMgickError = "";
+        }
     }
-    if (bReadSave)
+    __except (lpUnhandledExceptionFilter(GetExceptionInformation()))
     {
-        m_strImageMgickError = "";
+        m_strImageMgickError == "error";
     }
 }
 
