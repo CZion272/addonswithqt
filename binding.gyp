@@ -18,7 +18,7 @@
 		"Release": {
 		"configurations": {
 				"VCCLCompilerTool": {
-					"RuntimeLibrary": "2",
+					"RuntimeLibrary": "3",
 				},
 			},
 		},
@@ -101,7 +101,8 @@
 			"../magick/lib/CORE_RL_zlib_.lib",
 			"../magick/lib/CORE_RL_flif_.lib",
 			"$(QTDIR)/lib/Qt5Gui.lib",		 
-			"$(QTDIR)/lib/Qt5Core.lib"
+			"$(QTDIR)/lib/Qt5Core.lib",
+			"Dbghelp.lib"
 			],
 			}
     },

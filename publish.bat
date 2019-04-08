@@ -1,1 +1,1 @@
-node-pre-gyp clean configure --runtime=electron --target=1.7.5  build package --verbose
+node-pre-gyp configure --runtime=node --target=10.11.0  build package --verbose

@@ -2,12 +2,77 @@
 #include <QDebug>
 
 using namespace std;
-Persistent<Function> CImageReader::m_pConstructor;
+napi_ref CImageReader::constructor;
+
+const char *errorMessage[] = {
+    "No such file",
+    "Parameter error",
+    "env check error",
+};
+
+#define ERRORSTRING(env, code) \
+{\
+    napi_throw_error(env, QString::number(code).toLatin1().constData(), errorMessage[code]);\
+}
+
+static napi_value intValue(napi_env env, int num)
+{
+    napi_value rb;
+    napi_create_int32(env, num, &rb);
+    return rb;
+}
+
+static napi_value stringValue(napi_env env, QString str)
+{
+    napi_value rb;
+    napi_create_string_latin1(env, str.toLatin1(), str.length(), &rb);
+    return rb;
+}
+
+static napi_value boolenValue(napi_env env, bool b)
+{
+    napi_value rb;
+    napi_get_boolean(env, b, &rb);
+    return rb;
+}
+
+static bool checkNapiEnv(napi_env env, napi_callback_info info, size_t argc, napi_value *args, napi_value *jsthis)
+{
+    napi_status status;
+
+    napi_value target;
+    napi_get_new_target(env, info, &target);
+    if (napi_get_new_target(env, info, &target) != napi_ok)
+    {
+        return false;
+    }
+    if (napi_get_cb_info(env, info, &argc, args, jsthis, nullptr))
+    {
+        return false;
+    }
+    return true;
+}
+
+static bool checkValueType(napi_env env, napi_value value, napi_valuetype type)
+{
+    napi_valuetype valueType;
+    if (napi_typeof(env, value, &valueType) != napi_ok)
+    {
+        return false;
+    }
+    if (type != valueType)
+    {
+        return false;
+    }
+    return true;
+}
 
 CImageReader::CImageReader(const char* image, const char* preview) :
     m_strImage(image),
     m_strPreview(preview),
-    m_pImageObj(NULL)
+    m_pImageObj(NULL),
+    env_(nullptr),
+    wrapper_(nullptr)
 {
     //if (getenv("MAGICK_GHOSTSCRIPT_PATH") == NULL)
     {
@@ -34,6 +99,7 @@ CImageReader::CImageReader(const char* image, const char* preview) :
 
 CImageReader::~CImageReader()
 {
+    napi_delete_reference(env_, wrapper_);
     if (m_pImageObj != NULL)
     {
         delete m_pImageObj;
@@ -41,272 +107,560 @@ CImageReader::~CImageReader()
     }
 }
 
-void CImageReader::Init(Local<Object> exports)
+napi_value CImageReader::Init(napi_env env, napi_value exports)
 {
-    Isolate* isolate = exports->GetIsolate();
+    napi_status status;
+    napi_property_descriptor properties[] = {
+        //{ "value", 0, 0, GetValue, SetValue, 0, napi_default, 0 },
+        DECLARE_NAPI_METHOD("setDefaultColorList", setDefaultColorList),
+        DECLARE_NAPI_METHOD("setDefaultImageSize", setDefaultImageSize),
+        DECLARE_NAPI_METHOD("setDefaultMD5", setDefaultMD5),
+        DECLARE_NAPI_METHOD("setMiddleFile", setMiddleFile),
+        DECLARE_NAPI_METHOD("setPreviewSize", setPreviewSize),
+        DECLARE_NAPI_METHOD("readFile", readFile),
+        DECLARE_NAPI_METHOD("creatPreviewFile", creatPreviewFile),
+        DECLARE_NAPI_METHOD("creatColorMap", creatColorMap),
+        DECLARE_NAPI_METHOD("pingFileInfo", pingFileInfo),
+        DECLARE_NAPI_METHOD("Release", Release),
+        DECLARE_NAPI_METHOD("compareColor", compareColor),
+        DECLARE_NAPI_METHOD("colorCount", colorCount),
+        DECLARE_NAPI_METHOD("colorAt", colorAt),
+        DECLARE_NAPI_METHOD("imageWidth", imageWidth),
+        DECLARE_NAPI_METHOD("imageHeight", imageHeight),
+        DECLARE_NAPI_METHOD("MD5", MD5)
+    };
 
-    Local<FunctionTemplate> tpl = FunctionTemplate::New(isolate, New);
-    tpl->SetClassName(String::NewFromUtf8(isolate, "CImageReader"));
-    tpl->InstanceTemplate()->SetInternalFieldCount(1);
+    napi_value cons;
+    status = napi_define_class(env, "CImageReader", NAPI_AUTO_LENGTH, New, nullptr, 14, properties, &cons);
+    assert(status == napi_ok);
 
-    NODE_SET_PROTOTYPE_METHOD(tpl, "setDefaultColorList", setDefaultColorList);
-    NODE_SET_PROTOTYPE_METHOD(tpl, "setDefaultImageSize", setDefaultImageSize);
-    NODE_SET_PROTOTYPE_METHOD(tpl, "setDefaultMD5", setDefaultMD5);
+    status = napi_create_reference(env, cons, 1, &constructor);
+    assert(status == napi_ok);
 
-    NODE_SET_PROTOTYPE_METHOD(tpl, "setMiddleFile", setMiddleFile);
-    NODE_SET_PROTOTYPE_METHOD(tpl, "setPreviewSize", setPreviewSize);
-    NODE_SET_PROTOTYPE_METHOD(tpl, "readFile", readFile);
-    NODE_SET_PROTOTYPE_METHOD(tpl, "pingFileInfo", pingFileInfo);
-    NODE_SET_PROTOTYPE_METHOD(tpl, "Release", Release);
-
-    NODE_SET_PROTOTYPE_METHOD(tpl, "compareColor", compareColor);
-    NODE_SET_PROTOTYPE_METHOD(tpl, "colorCount", colorCount);
-    NODE_SET_PROTOTYPE_METHOD(tpl, "colorAt", colorAt);
-    NODE_SET_PROTOTYPE_METHOD(tpl, "imageWidth", imageWidth);
-    NODE_SET_PROTOTYPE_METHOD(tpl, "imageHeight", imageHeight);
-    NODE_SET_PROTOTYPE_METHOD(tpl, "MD5", MD5);
-
-    m_pConstructor.Reset(isolate, tpl->GetFunction());
-    exports->Set(String::NewFromUtf8(isolate, "CImageReader"),
-        tpl->GetFunction());
+    status = napi_set_named_property(env, exports, "CImageReader", cons);
+    assert(status == napi_ok);
+    return exports;
 }
 
-void CImageReader::New(const FunctionCallbackInfo<Value>& args)
+void CImageReader::Destructor(napi_env env, void* nativeObject, void* /*finalize_hint*/)
 {
-    Isolate* isolate = args.GetIsolate();
-    if (
-        !args[0]->IsString()
-        || !args[1]->IsString()
-        )
+    reinterpret_cast<CImageReader*>(nativeObject)->~CImageReader();
+}
+
+
+napi_value CImageReader::New(napi_env env, napi_callback_info info)
+{
+    napi_status status;
+
+    size_t argc = 2;
+    napi_value args[2];
+    napi_value jsthis;
+
+    napi_value target;
+    if (napi_get_new_target(env, info, &target) != napi_ok)
     {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "Parameter error")));
-        args.GetReturnValue().Set(FALSE);
-        return;
+        ERRORSTRING(env, 3);
+        return nullptr;
     }
 
-    v8::String::Utf8Value str(args[0]->ToString());
-    v8::String::Utf8Value str1(args[1]->ToString());
+    if (napi_get_cb_info(env, info, &argc, args, &jsthis, nullptr) != napi_ok)
+    {
+        ERRORSTRING(env, 3);
+        return false;
+    }
+    if (!checkValueType(env, args[0], napi_string))
+    {
+        ERRORSTRING(env, 2);
+        return nullptr;
+    }
+    if (!checkValueType(env, args[1], napi_string))
+    {
+        ERRORSTRING(env, 2);
+        return nullptr;
+    }
 
-    CImageReader *obj = new CImageReader(*str, *str1);
-    obj->Wrap(args.This());
-    args.GetReturnValue().Set(args.This());
+    char value[2][MAX_PATH];
+    size_t size;
+    napi_get_value_string_latin1(env, args[0], value[0], MAX_PATH, &size);
+    napi_get_value_string_latin1(env, args[1], value[1], MAX_PATH, &size);
+
+    CImageReader* obj = new CImageReader(value[0], value[1]);
+
+    obj->env_ = env;
+    status = napi_wrap(env,
+        jsthis,
+        reinterpret_cast<void*>(obj),
+        CImageReader::Destructor,
+        nullptr,  // finalize_hint
+        &obj->wrapper_);
+    assert(status == napi_ok);
+
+    return jsthis;
 }
 
-void CImageReader::Release(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::Release(napi_env env, napi_callback_info info)
 {
-    Isolate* isolate = args.GetIsolate();
+    napi_status status;
 
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+    CImageReader *obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
+    {
+        ERRORSTRING(env, 3);
+        return nullptr;
+    }
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        ERRORSTRING(env, 3);
+        return false;
+    }
     if (obj->m_pImageObj)
     {
         delete obj->m_pImageObj;
         obj->m_pImageObj = NULL;
     }
-    args.This().Clear();
+    return nullptr;
 }
 
-void CImageReader::setDefaultColorList(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::setDefaultColorList(napi_env env, napi_callback_info info)
 {
-    Isolate* isolate = args.GetIsolate();
-    if (!args[0]->IsString() || !args[1]->IsString())
+    napi_status status;
+
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+    CImageReader* obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
     {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "Parameter error")));
-        return;
+        ERRORSTRING(env, 3);
+        return nullptr;
     }
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
 
-    v8::String::Utf8Value str(args[0]->ToString());
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        ERRORSTRING(env, 3);
+        return false;
+    }
+    if (!checkValueType(env, args[0], napi_string))
+    {
+        ERRORSTRING(env, 2);
+        return nullptr;
+    }
 
-    v8::String::Utf8Value strSplit(args[1]->ToString());
+    char value[1024] = { 0 };
+    size_t size;
+    status = napi_get_value_string_latin1(env, args[0], value, 1024, &size);
 
-    QString strColor(*str);
+    QString strColor(value);
 
-    QStringList lstColor = strColor.split(*strSplit);
+    QStringList lstColor = strColor.split("*");
     QList<QColor> clr;
     foreach(QString strC, lstColor)
     {
         clr.append(QColor(strC));
     }
     obj->m_pImageObj->setDefaultColorList(clr);
+
+    return nullptr;
 }
 
-void CImageReader::setDefaultImageSize(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::setDefaultImageSize(napi_env env, napi_callback_info info)
 {
-    Isolate* isolate = args.GetIsolate();
-    if (!args[0]->IsNumber() || !args[1]->IsNumber())
+    napi_status status;
+
+    napi_value jsthis = NULL;
+    size_t argc = 2;
+    napi_value args[2];
+    CImageReader* obj;
+    if (checkNapiEnv(env, info, argc, args, &jsthis))
     {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "Parameter error")));
-        return;
+        ERRORSTRING(env, 3);
+        return nullptr;
     }
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+
+    if (checkValueType(env, args[0], napi_number))
+    {
+        ERRORSTRING(env, 2);
+        return nullptr;
+    }
+    if (checkValueType(env, args[1], napi_number))
+    {
+        ERRORSTRING(env, 2);
+        return nullptr;
+    }
+
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        ERRORSTRING(env, 3);
+        return false;
+    }
+    int value[2];
+    napi_get_value_int32(env, args[0], &value[0]);
+    napi_get_value_int32(env, args[1], &value[1]);
+
     if (obj->m_pImageObj)
     {
-        obj->m_pImageObj->setDefaultSize(args[0]->IntegerValue(), args[1]->IntegerValue());
+        obj->m_pImageObj->setDefaultSize(value[0], value[1]);
     }
     else
     {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "No Image Object")));
-        return;
+        ERRORSTRING(env, 1);
     }
+    return nullptr;
 }
 
-void CImageReader::setDefaultMD5(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::setDefaultMD5(napi_env env, napi_callback_info info)
 {
-    Isolate* isolate = args.GetIsolate();
-    if (!args[0]->IsString())
-    {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "Parameter error")));
-        return;
-    }
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+    napi_status status;
 
-    v8::String::Utf8Value str(args[0]->ToString());
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+    CImageReader* obj;
+    if (checkNapiEnv(env, info, argc, args, &jsthis))
+    {
+        ERRORSTRING(env, 3);
+        return boolenValue(env, false);;
+    }
+
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        ERRORSTRING(env, 3);
+        return false;
+    }
+    if (checkValueType(env, args[0], napi_string))
+    {
+        ERRORSTRING(env, 2);
+        return boolenValue(env, false);;
+    }
+
+    char value[1024] = { 0 };
+    size_t size;
+    napi_get_value_string_latin1(env, args[0], value, 1024, &size);
     if (obj->m_pImageObj)
     {
-        obj->m_pImageObj->setDefalutMD5(*str);
+        obj->m_pImageObj->setDefalutMD5(value);
     }
+
+    return jsthis;
 }
 
-void CImageReader::readFile(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::readFile(napi_env env, napi_callback_info info)
 {
-    Isolate* isolate = args.GetIsolate();
-    if (!args[0]->IsFunction())
-    {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "Parameter error")));
-        return;
-    }
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+    napi_status status;
 
-    QFileInfo info(obj->m_strImage);
-    if (!info.isFile())
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+    CImageReader *obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
     {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "Invalid file")));
-        args.GetReturnValue().Set(false);
-        return;
+        ERRORSTRING(env, 3);
+        return boolenValue(env, false);
     }
-    obj->m_pImageObj->readImage();
+    if (!checkValueType(env, args[0], napi_function))
+    {
+        ERRORSTRING(env, 2);
+        return boolenValue(env, false);
+    }
 
-    Local<Function> js_callback = Local<Function>::Cast(args[0]);
-    
-    Local<Value> error =
-        v8::Exception::TypeError(
-            String::NewFromUtf8(isolate,
-                obj->m_pImageObj->getLastError().toStdString().c_str()));
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        ERRORSTRING(env, 3);
+        return false;
+    }
+    napi_value global;
+    status = napi_get_global(env, &global);
+    napi_value argv[1] = { 0 };
+    napi_value result;
+    napi_value rb;
+    napi_value cb = args[0];
+    if (obj->m_pImageObj)
+    {
+        obj->m_pImageObj->readImage();
+    }
     if (!obj->m_pImageObj->getLastError().isEmpty())
     {
-        js_callback->Call(isolate->GetCurrentContext()->Global(), 1, &error);
-
-        args.GetReturnValue().Set(false);
+        argv[0] = stringValue(env, obj->m_pImageObj->getLastError());
+        napi_call_function(env, global, cb, 1, argv, &result);
+        return boolenValue(env, false);
     }
     else
     {
-        js_callback->Call(isolate->GetCurrentContext()->Global(), 0, 0);
-
-        args.GetReturnValue().Set(true);
+        napi_call_function(env, global, cb, 0, argv, &result);
+        return boolenValue(env, true);
     }
 }
 
-void CImageReader::pingFileInfo(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::pingFileInfo(napi_env env, napi_callback_info info)
 {
-    Isolate* isolate = args.GetIsolate();
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-    QFileInfo info(obj->m_strImage);
-    if (!info.isFile())
+    napi_status status;
+
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+    CImageReader *obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
     {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "Invalid file or video")));
-        args.GetReturnValue().Set(false);
-        return;
+        ERRORSTRING(env, 3);
+        return nullptr;
+    }
+
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        ERRORSTRING(env, 3);
+        return false;
+    }
+    napi_value global;
+    status = napi_get_global(env, &global);
+    napi_value rb;
+    QFileInfo fInfo(obj->m_strImage);
+    if (!fInfo.isFile())
+    {
+        ERRORSTRING(env, 1);
+        return boolenValue(env, false);
     }
     bool b = false;
     if (obj->m_pImageObj)
     {
         b = obj->m_pImageObj->pingImageFile();
     }
-    args.GetReturnValue().Set(b);
+    return boolenValue(env, b);
 }
 
-void CImageReader::setPreviewSize(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::creatPreviewFile(napi_env env, napi_callback_info info)
 {
-    Isolate* isolate = args.GetIsolate();
-    if (!args[0]->IsNumber() || !args[1]->IsNumber())
+    napi_status status;
+
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+    CImageReader *obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
     {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "Parameter error")));
-        args.GetReturnValue().Set(FALSE);
-        return;
+        ERRORSTRING(env, 3);
+        return nullptr;
     }
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+
+    if (!checkValueType(env, args[0], napi_function))
+    {
+        ERRORSTRING(env, 2);
+        return boolenValue(env, false);
+    }
+
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        ERRORSTRING(env, 3);
+        return false;
+    }
+    napi_value global;
+    status = napi_get_global(env, &global);
+    napi_value argv[1];
+    napi_value result;
+    napi_value rb;
+    napi_value cb = args[0];
+    bool b = false;
     if (obj->m_pImageObj)
     {
-        obj->m_pImageObj->setScallSize(args[0]->IntegerValue(), args[1]->IntegerValue());
+        b = obj->m_pImageObj->creatThumbnail();
     }
+    if (!b)
+    {
+        status = napi_create_string_utf8(env, obj->m_pImageObj->getLastError().toStdString().c_str(), NAPI_AUTO_LENGTH, argv);
+        napi_call_function(env, global, cb, 1, argv, &result);
+        return boolenValue(env, false);
+    }
+    else
+    {
+        napi_call_function(env, global, cb, 0, argv, &result);
+    }
+    return boolenValue(env, b);
 }
 
-void CImageReader::setMiddleFile(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::creatColorMap(napi_env env, napi_callback_info info)
 {
-    Isolate* isolate = args.GetIsolate();
-    if (!args[0]->IsString())
+    napi_status status;
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+    CImageReader *obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
     {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "Parameter error")));
-        args.GetReturnValue().Set(FALSE);
-        return;
+        ERRORSTRING(env, 3);
+        return nullptr;
     }
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
 
-    v8::String::Utf8Value str(args[0]->ToString());
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        return false;
+    }
+    napi_value global;
+    status = napi_get_global(env, &global);
+    napi_value argv[1];
+    napi_value result;
+    napi_value rb;
+    napi_value cb = args[0];
+    bool b = false;
     if (obj->m_pImageObj)
     {
-        obj->m_pImageObj->setMiddleFile(*str);
+        b = obj->m_pImageObj->creatColorMap();
     }
+    if (!b)
+    {
+        status = napi_create_string_utf8(env, obj->m_pImageObj->getLastError().toStdString().c_str(), NAPI_AUTO_LENGTH, argv);
+        napi_call_function(env, global, cb, 1, argv, &result);
+    }
+    else
+    {
+        napi_call_function(env, global, cb, 0, argv, &result);
+    }
+    return boolenValue(env, b);
 }
 
-void CImageReader::compareColor(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::setPreviewSize(napi_env env, napi_callback_info info)
 {
-    Isolate* isolate = args.GetIsolate();
-    if (!args[0]->IsString())
+    napi_status status;
+
+    napi_value jsthis = NULL;
+    size_t argc = 2;
+    napi_value args[2];
+
+    CImageReader *obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
     {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "Parameter error")));
-        args.GetReturnValue().Set(FALSE);
-        return;
+        ERRORSTRING(env, 3);
+        return nullptr;
     }
-    v8::String::Utf8Value str(args[0]->ToString());
-    QColor color(*str);
+    if (!checkValueType(env, args[0], napi_number))
+    {
+        ERRORSTRING(env, 2);
+        return nullptr;
+    }
+
+    if (!checkValueType(env, args[1], napi_number))
+    {
+        ERRORSTRING(env, 2);
+        return nullptr;
+    }
+
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        return false;
+    }
+    int value[2];
+    napi_get_value_int32(env, args[0], &value[0]);
+    napi_get_value_int32(env, args[1], &value[1]);
+
+    if (obj->m_pImageObj)
+    {
+        obj->m_pImageObj->setScallSize(value[0], value[1]);
+    }
+    return nullptr;
+}
+
+napi_value CImageReader::setMiddleFile(napi_env env, napi_callback_info info)
+{
+    napi_status status;
+
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+    CImageReader *obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
+    {
+        ERRORSTRING(env, 3);
+        return nullptr;
+    }
+
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        return false;
+    }
+    if (!checkValueType(env, args[0], napi_string))
+    {
+        ERRORSTRING(env, 2);
+        return nullptr;
+    }
+
+    char value[MAX_PATH] = { 0 };
+    size_t size;
+    napi_get_value_string_latin1(env, args[0], value, MAX_PATH, &size);
+    if (obj->m_pImageObj)
+    {
+        obj->m_pImageObj->setMiddleFile(value);
+    }
+    return nullptr;
+}
+
+napi_value CImageReader::compareColor(napi_env env, napi_callback_info info)
+{
+    napi_status status;
+
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+
+    CImageReader *obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
+    {
+        ERRORSTRING(env, 3);
+        return boolenValue(env, false);
+    }
+    if (!checkValueType(env, args[0], napi_string))
+    {
+        ERRORSTRING(env, 2);
+        return boolenValue(env, false);
+    }
+
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        return false;
+    }
+    char value[1024] = { 0 };
+    size_t size;
+    napi_get_value_string_latin1(env, args[0], value, 1024, &size);
+
+    napi_value rb;
+    bool bCompare = false;
+    QColor color(value);
     if (color.isValid())
     {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "Parameter error")));
-        args.GetReturnValue().Set(FALSE);
-        return;
+        ERRORSTRING(env, 2);
+        return boolenValue(env, bCompare);
     }
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-    bool bCompare = false;
     if (obj->m_pImageObj)
     {
         bCompare = obj->m_pImageObj->compareColorEx(color);
     }
-    args.GetReturnValue().Set(!bCompare);
+    return boolenValue(env, bCompare);
 }
 
-void CImageReader::MD5(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::MD5(napi_env env, napi_callback_info info)
 {
-    Isolate* isolate = args.GetIsolate();
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
-    QFile file(obj->m_strImage);
-    if (!file.open(QFile::ReadOnly))
+    napi_status status;
+
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+
+    CImageReader *obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
     {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "File open failed")));
-        args.GetReturnValue().Set(FALSE);
+        ERRORSTRING(env, 3);
+        return nullptr;
+    }
+
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        return false;
+    }
+    QFile file(obj->m_strImage);
+    if (!file.exists())
+    {
+        ERRORSTRING(env, 1);
+        return nullptr;
     }
     QString strMD5 = "";
     if (obj->m_pImageObj)
@@ -314,70 +668,128 @@ void CImageReader::MD5(const FunctionCallbackInfo<Value>& args)
         strMD5 = obj->m_pImageObj->MD5();
     }
     file.close();
-    args.GetReturnValue().Set(String::NewFromUtf8(isolate, strMD5.toLatin1().constData()));
+    return stringValue(env, strMD5);
 }
 
-void CImageReader::colorCount(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::colorCount(napi_env env, napi_callback_info info)
 {
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+    napi_status status;
+
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+
+    CImageReader *obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
+    {
+        ERRORSTRING(env, 3);
+        return nullptr;
+    }
+
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        return false;
+    }
     int nCount = 0;
     if (obj->m_pImageObj)
     {
         nCount = obj->m_pImageObj->getColorList().count();
     }
-    args.GetReturnValue().Set(nCount);
+    return intValue(env, nCount);
 }
 
-//static node.jsʹ��
-void CImageReader::colorAt(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::colorAt(napi_env env, napi_callback_info info)
 {
-    Isolate* isolate = args.GetIsolate();
-    if (!args[0]->IsNumber())
-    {
-        isolate->ThrowException(v8::Exception::TypeError(
-            String::NewFromUtf8(isolate, "Parameter error")));
-        args.GetReturnValue().Set(FALSE);
-        return;
-    }
-    int i = args[0]->NumberValue();
+    napi_status status;
 
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+
+    CImageReader *obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
+    {
+        ERRORSTRING(env, 3);
+        return nullptr;
+    }
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        return false;
+    }
+
+    if (!checkValueType(env, args[0], napi_number))
+    {
+        ERRORSTRING(env, 2);
+        return nullptr;
+    }
+    int value;
+    size_t size;
+    napi_get_value_int32(env, args[0], &value);
+
     QList<QColor> lstColor;
     if (obj->m_pImageObj)
     {
         lstColor = obj->m_pImageObj->getColorList();
     }
 
-    if (i >= lstColor.count())
+    if (value >= lstColor.count())
     {
-        args.GetReturnValue().Set(String::NewFromUtf8(isolate, ""));
-        return;
+        return nullptr;
     }
-    QColor color = lstColor.at(i);
-    args.GetReturnValue().Set(String::NewFromUtf8(isolate, color.name().toLatin1().constData()));
-    return;
+    QColor color = lstColor.at(value);
+    return stringValue(env, color.name());
 }
 
-void CImageReader::imageWidth(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::imageWidth(napi_env env, napi_callback_info info)
 {
-    Isolate* isolate = args.GetIsolate();
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+    napi_status status;
+
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+    CImageReader *obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
+    {
+        ERRORSTRING(env, 3);
+        return nullptr;
+    }
+
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        return false;
+    }
     int nWigth = 0;
     if (obj->m_pImageObj)
     {
         nWigth = obj->m_pImageObj->getWigth();
     }
-    args.GetReturnValue().Set(nWigth);
+
+    return intValue(env, nWigth);
 }
 
-void CImageReader::imageHeight(const FunctionCallbackInfo<Value>& args)
+napi_value CImageReader::imageHeight(napi_env env, napi_callback_info info)
 {
-    Isolate* isolate = args.GetIsolate();
-    CImageReader* obj = ObjectWrap::Unwrap<CImageReader>(args.Holder());
+    napi_status status;
+
+    napi_value jsthis = NULL;
+    size_t argc = 1;
+    napi_value args[1];
+    CImageReader *obj;
+    if (!checkNapiEnv(env, info, argc, args, &jsthis))
+    {
+        ERRORSTRING(env, 3);
+        return nullptr;
+    }
+
+    if (napi_unwrap(env, jsthis, reinterpret_cast<void**>(&obj)) != napi_ok)
+    {
+        return false;
+    }
     int nHeight = 0;
     if (obj->m_pImageObj)
     {
         nHeight = obj->m_pImageObj->getHeight();
     }
-    args.GetReturnValue().Set(nHeight);
+
+    return intValue(env, nHeight);
 }

@@ -4,7 +4,12 @@ var binding_path = binary.find(path.resolve(path.join(__dirname,'./package.json'
 var binding = require(binding_path);
 
 exports.hasColor = function hasColor(color, list){
-	return binding.hasColor(color, list)
+	return binding.hasColor(color, list);
+}
+
+exports.creatColorMap = function creatColorMap(filePath)
+{
+	return binding.creatColorMap(filePath);
 }
 
 exports.CReadImage = class CReadImage{
@@ -35,7 +40,15 @@ exports.CReadImage = class CReadImage{
 	readFile(funcation){
 		this.obj.readFile(funcation);
 	}
-	
+
+	creatPreviewFile(funcation){
+		this.obj.readFile(funcation);
+	}
+
+	creatColorMap(funcation){
+		this.obj.readFile(funcation);
+	}
+
 	pingFileInfo(){
 		return this.obj.pingFileInfo();
 	}
