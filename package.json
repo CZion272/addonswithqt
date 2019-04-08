@@ -1,6 +1,6 @@
 {
   "name": "addonswithqt",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "main": "main.js",
   "dependencies": {
     "bindings": "~1.2.1",
@@ -19,11 +19,8 @@
   "gypfile": true,
   "binary": {
     "module_name": "qtAddons",
-    "module_path": "./lib/v{napi_build_version}",
-    "remote_path": "./{module_name}/v{napi_build_version}/{configuration}/",
-    "host": "https://github.com/CZion272/addonswithqt/releases/download/",
-    "napi_versions": [
-      3
-    ]
+    "module_path": "./lib/",
+    "remote_path": "./{version}/",
+    "host": "https://github.com/CZion272/addonswithqt/releases/download/"
   }
 }
