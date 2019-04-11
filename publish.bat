@@ -1,1 +1,1 @@
-node-pre-gyp configure --runtime=node --target=10.11.0  build package --verbose
+node-pre-gyp configure build package --verbose

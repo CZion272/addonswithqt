@@ -67,7 +67,30 @@ static bool checkValueType(napi_env env, napi_value value, napi_valuetype type)
     return true;
 }
 
-CImageReader::CImageReader(const char* image, const char* preview) :
+static bool napiValueToString(napi_env env, napi_value value, QString &string)
+{
+    if (!checkValueType(env, value, napi_string))
+    {
+        return false;
+    }
+    size_t size;
+    char *ch;
+    if (napi_get_value_string_latin1(env, value, NULL, NAPI_AUTO_LENGTH, &size) != napi_ok)
+    {
+        return false;
+    }
+    ch = new char[size + 1];
+    if (napi_get_value_string_latin1(env, value, ch, size + 1, &size) != napi_ok)
+    {
+        delete ch;
+        return false;
+    }
+    string = QString(ch);
+    delete ch;
+    return true;
+}
+
+CImageReader::CImageReader(QString image, QString preview) :
     m_strImage(image),
     m_strPreview(preview),
     m_pImageObj(NULL),
@@ -179,12 +202,12 @@ napi_value CImageReader::New(napi_env env, napi_callback_info info)
         return nullptr;
     }
 
-    char value[2][MAX_PATH];
-    size_t size;
-    napi_get_value_string_latin1(env, args[0], value[0], MAX_PATH, &size);
-    napi_get_value_string_latin1(env, args[1], value[1], MAX_PATH, &size);
+    QString strImage;
+    QString strPreview;
+    napiValueToString(env, args[0], strImage);
+    napiValueToString(env, args[0], strPreview);
 
-    CImageReader* obj = new CImageReader(value[0], value[1]);
+    CImageReader* obj = new CImageReader(strImage, strPreview);
 
     obj->env_ = env;
     status = napi_wrap(env,
@@ -249,11 +272,10 @@ napi_value CImageReader::setDefaultColorList(napi_env env, napi_callback_info in
         return nullptr;
     }
 
-    char value[1024] = { 0 };
-    size_t size;
-    status = napi_get_value_string_latin1(env, args[0], value, 1024, &size);
+    QString strColor;
 
-    QString strColor(value);
+    napiValueToString(env, args[0], strColor);
+
 
     QStringList lstColor = strColor.split("*");
     QList<QColor> clr;
@@ -336,12 +358,13 @@ napi_value CImageReader::setDefaultMD5(napi_env env, napi_callback_info info)
         return boolenValue(env, false);;
     }
 
-    char value[1024] = { 0 };
-    size_t size;
-    napi_get_value_string_latin1(env, args[0], value, 1024, &size);
+    QString strMD5;
+
+    napiValueToString(env, args[0], strMD5);
+
     if (obj->m_pImageObj)
     {
-        obj->m_pImageObj->setDefalutMD5(value);
+        obj->m_pImageObj->setDefalutMD5(strMD5);
     }
 
     return jsthis;
@@ -468,7 +491,7 @@ napi_value CImageReader::creatPreviewFile(napi_env env, napi_callback_info info)
     }
     if (!b)
     {
-        status = napi_create_string_utf8(env, obj->m_pImageObj->getLastError().toStdString().c_str(), NAPI_AUTO_LENGTH, argv);
+        argv[0] = stringValue(env, obj->m_pImageObj->getLastError());
         napi_call_function(env, global, cb, 1, argv, &result);
         return boolenValue(env, false);
     }
@@ -509,7 +532,7 @@ napi_value CImageReader::creatColorMap(napi_env env, napi_callback_info info)
     }
     if (!b)
     {
-        status = napi_create_string_utf8(env, obj->m_pImageObj->getLastError().toStdString().c_str(), NAPI_AUTO_LENGTH, argv);
+        argv[0] = stringValue(env, obj->m_pImageObj->getLastError());
         napi_call_function(env, global, cb, 1, argv, &result);
     }
     else
@@ -583,13 +606,11 @@ napi_value CImageReader::setMiddleFile(napi_env env, napi_callback_info info)
         ERRORSTRING(env, 2);
         return nullptr;
     }
-
-    char value[MAX_PATH] = { 0 };
-    size_t size;
-    napi_get_value_string_latin1(env, args[0], value, MAX_PATH, &size);
+    QString strMid;
+    napiValueToString(env, args[0], strMid);
     if (obj->m_pImageObj)
     {
-        obj->m_pImageObj->setMiddleFile(value);
+        obj->m_pImageObj->setMiddleFile(strMid);
     }
     return nullptr;
 }
@@ -618,13 +639,13 @@ napi_value CImageReader::compareColor(napi_env env, napi_callback_info info)
     {
         return false;
     }
-    char value[1024] = { 0 };
-    size_t size;
-    napi_get_value_string_latin1(env, args[0], value, 1024, &size);
+
+    QString strColor;
+    napiValueToString(env, args[0], strColor);
 
     napi_value rb;
     bool bCompare = false;
-    QColor color(value);
+    QColor color(strColor);
     if (color.isValid())
     {
         ERRORSTRING(env, 2);

@@ -15,11 +15,17 @@
 		"office.cpp",
 		"office.h"
 		],
-		"Release": {
+
 		"configurations": {
-				"VCCLCompilerTool": {
-					"RuntimeLibrary": "3",
-				},
+			"Release": {
+				"msvs_settings":{
+					"VCCLCompilerTool": {
+						'CompileAsManaged': 'true',
+						'ExceptionHandling': '0',
+						"RuntimeLibrary": "2",
+						"RuntimeTypeInfo": "true"
+					},
+				}
 			},
 		},
 		"defines": [

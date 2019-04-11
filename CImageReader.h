@@ -20,7 +20,7 @@ public:
     static napi_value Init(napi_env env, napi_value exports);
     static void Destructor(napi_env env, void* nativeObject, void* finalize_hint);
 private:
-    explicit CImageReader(const char* strImage = "", const char* strPreview = "");
+    explicit CImageReader(QString strImage = "", QString strPreview = "");
     ~CImageReader();
 private:
     //µ¼³öº¯Êý
