@@ -6,29 +6,27 @@
 #include <QImageReader>
 #include <QFileInfo>
 #include <direct.h>
+#include <Windows.h>
+#include <Dbghelp.h>
+#pragma comment (lib, "Dbghelp.lib")
 
 enum FILETYPE
 {
     TYPE_NORMAL,
     TYPE_CDR,
-    TYPE_OFFICE
+    TYPE_OFFICE,
+    TYPE_VIDEO
 };
 
-static int HistogramCompare(const void *x, const void *y)
-{
-    const PixelInfo
-        *color_1,
-        *color_2;
+LONG WINAPI lpUnhandledExceptionFilter(struct _EXCEPTION_POINTERS *ExceptionInfo);
 
-    color_1 = (const PixelInfo *)x;
-    color_2 = (const PixelInfo *)y;
-    return((int)color_2->count - (int)color_1->count);
-}
+
+int HistogramCompare(const void *x, const void *y);
 
 class ImageObjcet
 {
 public:
-    ImageObjcet(const char* image, const char* preview);
+    ImageObjcet(QString image, QString preview);
     ~ImageObjcet();
 public:
     QString MD5();
@@ -40,6 +38,9 @@ public:
     bool pingImageFile();
     void readImage();
     bool readImageFile();
+    bool creatThumbnail();
+
+    bool creatColorMap();
     bool readCdrPerviewFile();
     bool readPPT();
     bool readVideo();
