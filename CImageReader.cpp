@@ -75,12 +75,12 @@ static bool napiValueToString(napi_env env, napi_value value, QString &string)
     }
     size_t size;
     char *ch;
-    if (napi_get_value_string_latin1(env, value, NULL, NAPI_AUTO_LENGTH, &size) != napi_ok)
+    if (napi_get_value_string_utf8(env, value, NULL, NAPI_AUTO_LENGTH, &size) != napi_ok)
     {
         return false;
     }
     ch = new char[size + 1];
-    if (napi_get_value_string_latin1(env, value, ch, size + 1, &size) != napi_ok)
+    if (napi_get_value_string_utf8(env, value, ch, size + 1, &size) != napi_ok)
     {
         delete ch;
         return false;
@@ -154,7 +154,7 @@ napi_value CImageReader::Init(napi_env env, napi_value exports)
     };
 
     napi_value cons;
-    status = napi_define_class(env, "CImageReader", NAPI_AUTO_LENGTH, New, nullptr, 14, properties, &cons);
+    status = napi_define_class(env, "CImageReader", NAPI_AUTO_LENGTH, New, nullptr, 16, properties, &cons);
     assert(status == napi_ok);
 
     status = napi_create_reference(env, cons, 1, &constructor);

@@ -72,13 +72,13 @@ namespace qtAddons
 
         char value[2][1024] = { 0 };
         size_t size;
-        status = napi_get_value_string_utf8(env, args[0], value[0], 1024, &size);
+        status = napi_get_value_string_latin1(env, args[0], value[0], 1024, &size);
         assert(status == napi_ok);
-        status = napi_get_value_string_utf8(env, args[1], value[1], 1024, &size);
+        status = napi_get_value_string_latin1(env, args[1], value[1], 1024, &size);
         assert(status == napi_ok);
 
         QString strColor = value[0];
-
+ 
         QString strColorList = value[1];
 
         QStringList lstStrColor = strColorList.split(",");
@@ -116,7 +116,7 @@ namespace qtAddons
 
             char value[MAX_PATH] = { 0 };
             size_t size;
-            status = napi_get_value_string_utf8(env, args[0], value, 1024, &size);
+            status = napi_get_value_string_latin1(env, args[0], value, 1024, &size);
             assert(status == napi_ok);
 
             QFileInfo file(value);
