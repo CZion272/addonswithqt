@@ -205,7 +205,7 @@ napi_value CImageReader::New(napi_env env, napi_callback_info info)
     QString strImage;
     QString strPreview;
     napiValueToString(env, args[0], strImage);
-    napiValueToString(env, args[0], strPreview);
+    napiValueToString(env, args[1], strPreview);
 
     CImageReader* obj = new CImageReader(strImage, strPreview);
 
