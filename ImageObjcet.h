@@ -38,9 +38,9 @@ public:
     bool pingImageFile();
     void readImage();
     bool readImageFile();
-    bool creatThumbnail();
+    bool createThumbnail();
 
-    bool creatColorMap();
+    bool createColorMap();
     bool readCdrPerviewFile();
     bool readPPT();
     bool readVideo();
@@ -81,4 +81,6 @@ private:
     ImageInfo *m_pIMImageInfo;
     ImageInfo *m_pIMThumbnailsInfo;
     ExceptionInfo *m_pIMException;
+
+    bool m_bSaved;
 };

@@ -69,7 +69,8 @@ ImageObjcet::ImageObjcet(QString image, QString preview) :
     m_pIMImageInfo(NULL),
     m_pIMImages(NULL),
     m_pIMThumbnails(NULL),
-    m_pIMThumbnailsInfo(NULL)
+    m_pIMThumbnailsInfo(NULL),
+    m_bSaved(false)
 {
     m_strSufix = QFileInfo(m_strImage).suffix().toLower();
 }
@@ -199,10 +200,7 @@ void ImageObjcet::readImage()
             m_strImage = m_strMiddleFile;
             m_strMiddleFile = "";
         }
-        if (bReadSave)
-        {
-            m_strImageMgickError = "";
-        }
+        m_bSaved = bReadSave;
     }
     __except (lpUnhandledExceptionFilter(GetExceptionInformation()))
     {
@@ -246,7 +244,7 @@ bool ImageObjcet::readImageFile()
     }
 }
 
-bool ImageObjcet::creatThumbnail()
+bool ImageObjcet::createThumbnail()
 {
     __try
     {
@@ -336,7 +334,7 @@ bool ImageObjcet::creatThumbnail()
     }
 }
 
-bool ImageObjcet::creatColorMap()
+bool ImageObjcet::createColorMap()
 {
     __try
     {
@@ -413,6 +411,7 @@ bool ImageObjcet::readCdrPerviewFile()
             // do something cool with file here
             file.close(); // do not forget to close!
             zip.close();
+            m_strImage = strFileToSave;
             return readImageFile();
         }
     }
@@ -517,9 +516,12 @@ bool ImageObjcet::compareColorEx(QColor color, int nDiff /*= 10000*/)
 
 QString ImageObjcet::getLastError()
 {
-    if (m_pIMException)
+    if (!m_bSaved)
     {
-        m_strImageMgickError = m_pIMException->reason;
+        if (m_pIMException)
+        {
+            m_strImageMgickError = m_pIMException->reason;
+        }
     }
     return m_strImageMgickError;
 }
