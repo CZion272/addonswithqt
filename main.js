@@ -41,12 +41,12 @@ exports.CReadImage = class CReadImage{
 		this.obj.readFile(funcation);
 	}
 
-	creatPreviewFile(funcation){
-		this.obj.readFile(funcation);
+	createPreviewFile(funcation){
+		this.obj.createPreviewFile(funcation);
 	}
 
-	creatColorMap(funcation){
-		this.obj.readFile(funcation);
+	createColorMap(funcation){
+		this.obj.createColorMap(funcation);
 	}
 
 	pingFileInfo(){

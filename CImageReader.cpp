@@ -141,8 +141,8 @@ napi_value CImageReader::Init(napi_env env, napi_value exports)
         DECLARE_NAPI_METHOD("setMiddleFile", setMiddleFile),
         DECLARE_NAPI_METHOD("setPreviewSize", setPreviewSize),
         DECLARE_NAPI_METHOD("readFile", readFile),
-        DECLARE_NAPI_METHOD("creatPreviewFile", creatPreviewFile),
-        DECLARE_NAPI_METHOD("creatColorMap", creatColorMap),
+        DECLARE_NAPI_METHOD("createPreviewFile", createPreviewFile),
+        DECLARE_NAPI_METHOD("createColorMap", createColorMap),
         DECLARE_NAPI_METHOD("pingFileInfo", pingFileInfo),
         DECLARE_NAPI_METHOD("Release", Release),
         DECLARE_NAPI_METHOD("compareColor", compareColor),
@@ -453,7 +453,7 @@ napi_value CImageReader::pingFileInfo(napi_env env, napi_callback_info info)
     return boolenValue(env, b);
 }
 
-napi_value CImageReader::creatPreviewFile(napi_env env, napi_callback_info info)
+napi_value CImageReader::createPreviewFile(napi_env env, napi_callback_info info)
 {
     napi_status status;
 
@@ -487,7 +487,7 @@ napi_value CImageReader::creatPreviewFile(napi_env env, napi_callback_info info)
     bool b = false;
     if (obj->m_pImageObj)
     {
-        b = obj->m_pImageObj->creatThumbnail();
+        b = obj->m_pImageObj->createThumbnail();
     }
     if (!b)
     {
@@ -502,7 +502,7 @@ napi_value CImageReader::creatPreviewFile(napi_env env, napi_callback_info info)
     return boolenValue(env, b);
 }
 
-napi_value CImageReader::creatColorMap(napi_env env, napi_callback_info info)
+napi_value CImageReader::createColorMap(napi_env env, napi_callback_info info)
 {
     napi_status status;
     napi_value jsthis = NULL;
@@ -528,7 +528,7 @@ napi_value CImageReader::creatColorMap(napi_env env, napi_callback_info info)
     bool b = false;
     if (obj->m_pImageObj)
     {
-        b = obj->m_pImageObj->creatColorMap();
+        b = obj->m_pImageObj->createColorMap();
     }
     if (!b)
     {

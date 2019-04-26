@@ -37,8 +37,8 @@ private:
     static napi_value setMiddleFile(napi_env env, napi_callback_info info);//CDR AI PPT等无法直接预览的格式需要
     static napi_value readFile(napi_env env, napi_callback_info info);
     static napi_value pingFileInfo(napi_env env, napi_callback_info info);
-    static napi_value creatPreviewFile(napi_env env, napi_callback_info info);
-    static napi_value creatColorMap(napi_env env, napi_callback_info info);
+    static napi_value createPreviewFile(napi_env env, napi_callback_info info);
+    static napi_value createColorMap(napi_env env, napi_callback_info info);
     //获取文件属性
     static napi_value compareColor(napi_env env, napi_callback_info info);
     static napi_value MD5(napi_env env, napi_callback_info info);
